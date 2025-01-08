@@ -9,8 +9,10 @@ __author__ = "Christian Palmroos"
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def ramp_regression():
-    return 0
+import piecewise_regression
+
+from .calc_utilities import resample_df
+from .plotting_utilities import set_standard_ticks
 
 def break_regression():
     return 0
@@ -48,22 +50,15 @@ def quicklook(data, channel:str=None, resample:str=None, xlim:list=None):
     for ch in channel:
 
         ax.step(data.index.values, data[ch].values, where="mid", label=ch)
-        
+
+    # The x-axis boundaries
+    if xlim is None:
+        ax.set_xlim(data.index.values[0], data.index.values[-1])
+    else:
+        ax.set_xlim(pd.to_datetime(xlim[0]), pd.to_datetime(xlim[1]))
+
     ax.legend(fontsize=STANDARD_LEGENDSIZE)
+
+    set_standard_ticks(ax=ax, labelsize=None)
     
     plt.show()
-
-def resample_df(df, avg):
-    """
-    Resamples a dataframe such that care is taken on the offset and origin of the data index.
-    """
-
-    if isinstance(avg,str):
-        avg = pd.Timedelta(avg)
-
-    copy_df = df.resample(rule=avg, origin="start", label="left").mean()
-
-    # After resampling, a time offset must be added to preserve the correct alignment of the time bins
-    copy_df.index = copy_df.index + pd.tseries.frequencies.to_offset(avg/2)
-
-    return copy_df
