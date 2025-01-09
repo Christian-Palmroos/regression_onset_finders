@@ -23,7 +23,7 @@ def break_regression(ints, indices, starting_values:list=None):
                                    start_values=starting_values,
                                    n_breakpoints=NUM_OF_BREAKPOINTS)
 
-    return fit.get_results
+    return fit.get_results()
 
 def quicklook(data, channel:str=None, resample:str=None, xlim:list=None):
     """
