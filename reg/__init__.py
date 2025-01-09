@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import piecewise_regression
 
 from .calc_utilities import resample_df
-from .plotting_utilities import set_standard_ticks
+from .plotting_utilities import set_standard_ticks, STANDARD_FIGSIZE, STANDARD_LEGENDSIZE
 
 def break_regression(ints, indices, starting_values:list=None):
 
@@ -37,9 +37,6 @@ def quicklook(data, channel:str=None, resample:str=None, xlim:list=None):
     
     xlim : list
     """
-
-    STANDARD_FIGSIZE = (26,11)
-    STANDARD_LEGENDSIZE = 26
 
     #color = plt.cmap("plasma")
     if resample is not None:

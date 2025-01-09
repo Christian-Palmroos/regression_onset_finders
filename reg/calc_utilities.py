@@ -5,6 +5,7 @@ Contains calculation utility functions and constants.
 
 __author__ = "Christian Palmroos"
 
+import numpy as np
 import pandas as pd
 
 def resample_df(df, avg):
