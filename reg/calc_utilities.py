@@ -71,6 +71,34 @@ def generate_fit_lines(indices, const, alpha1, alpha2, breakpoint):
     return pd.Series(line1, index=indices_sel1), pd.Series(line2, index=indices_sel2)
 
 
+def get_interpolated_timestamp(datetimes, breakpoint):
+    """
+    Finds a timestamp from a series that relates to a floating-point index rather than integer.
+
+    Parameters:
+    -----------
+    datetimes : {DatetimeIndex or similar}
+    breakpoint : {float}
+    
+    Returns:
+    ----------
+    interpolated_timestamp : {Timestamp}
+    """
+
+    # The "floor" of the index and the fractional part separately
+    lower_index = int(breakpoint)
+    fractional_part = breakpoint - lower_index
+
+    # State the two timestamps to interpolate between
+    lower_timestamp = datetimes[lower_index]
+    upper_timestamp = datetimes[lower_index+1]
+
+    # Calculate the interpolated timestamp
+    interpolated_timestamp = lower_timestamp + fractional_part * (upper_timestamp - lower_timestamp)
+
+    return interpolated_timestamp
+
+
 def search_first_peak(ints, window=None, threshold=None):
     """
     Searches for a local maximum for a given window.
