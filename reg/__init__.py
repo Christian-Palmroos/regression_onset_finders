@@ -14,8 +14,16 @@ import piecewise_regression
 from .calc_utilities import resample_df
 from .plotting_utilities import set_standard_ticks
 
-def break_regression():
-    return 0
+def break_regression(ints, indices, starting_values:list=None):
+
+    NUM_OF_BREAKPOINTS = 1
+
+    fit = piecewise_regression.Fit(xx=indices,
+                                   yy=ints,
+                                   start_values=starting_values,
+                                   n_breakpoints=NUM_OF_BREAKPOINTS)
+
+    return fit.get_results
 
 def quicklook(data, channel:str=None, resample:str=None, xlim:list=None):
     """
