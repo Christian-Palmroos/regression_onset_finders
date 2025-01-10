@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 import piecewise_regression
 
 from .calc_utilities import resample_df
-from .plotting_utilities import set_standard_ticks, STANDARD_FIGSIZE, STANDARD_LEGENDSIZE
+from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_FIGSIZE, STANDARD_LEGENDSIZE
 
-def break_regression(ints, indices, starting_values:list=None):
+def break_regression(ints, indices, starting_values:list=None) -> dict:
 
     NUM_OF_BREAKPOINTS = 1
 
@@ -25,7 +25,7 @@ def break_regression(ints, indices, starting_values:list=None):
 
     return fit.get_results()
 
-def quicklook(data, channel:str=None, resample:str=None, xlim:list=None):
+def quicklook(data:pd.DataFrame, channel:str=None, resample:str=None, xlim:list=None):
     """
     Makes a quicklook plot of one or more channels for a given dataframe.
     
@@ -53,17 +53,13 @@ def quicklook(data, channel:str=None, resample:str=None, xlim:list=None):
     ax.set_yscale("log")
 
     for ch in channel:
-
         ax.step(data.index.values, data[ch].values, where="mid", label=ch)
-
-    # The x-axis boundaries
-    if xlim is None:
-        ax.set_xlim(data.index.values[0], data.index.values[-1])
-    else:
-        ax.set_xlim(pd.to_datetime(xlim[0]), pd.to_datetime(xlim[1]))
 
     ax.legend(fontsize=STANDARD_LEGENDSIZE)
 
+    set_xlims(ax=ax, data=data, xlim=xlim)
     set_standard_ticks(ax=ax, labelsize=None)
     
     plt.show()
+
+

@@ -8,7 +8,7 @@ __author__ = "Christian Palmroos"
 import numpy as np
 import pandas as pd
 
-def resample_df(df, avg):
+def resample_df(df, avg) -> pd.DataFrame:
     """
     Resamples a dataframe such that care is taken on the offset and origin of the data index.
 
@@ -29,7 +29,50 @@ def resample_df(df, avg):
     return copy_df
 
 
-def generate_fit_lines(indices, const, alpha1, alpha2, breakpoint):
+def ints2log10(intensity, fill_style="bfill") -> pd.Series:
+    """
+    Converts intensities to log(intensity). Fills -infs with 
+    fill_style.
+    
+    Parameters:
+    -----------
+    intensity : {pd.Series}
+    fill_style : {str} either 'bfill' or 'ffill'
+    
+    Returns:
+    ----------
+    logints : {pd.Series}
+    """
+
+    VALID_FILL_STYLES = ("bfill", "ffill")
+
+    # At the start check that the filling style is valid
+    if fill_style not in VALID_FILL_STYLES:
+        raise ValueError(f"Parameter fill_style must be in {VALID_FILL_STYLES}")
+
+    # Takes the logarithm of the ints
+    logints = np.log10(intensity)
+
+    # There may be zeroes in the intensities, which get converted to -inf
+    # Convert -infs to nan
+    logints.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    # Finally fill all the nans with the selected style
+    match fill_style:
+
+        # For a reason I don't understand it's not possible to match-case against elements of 
+        # VALID_FILL_STYLES here, and instead I'm forced to spell them out as strings. The current
+        # implementation is inelegant and vexes me.
+        case "bfill":
+            logints.bfill(inplace=True)
+
+        case "ffill":
+            logints.ffill(inplace=True)
+
+    return logints
+
+
+def generate_fit_lines(indices, const, alpha1, alpha2, break_point) -> tuple[pd.Series, pd.Series]:
     """
     Generates two lines from fit parameters.
     
@@ -39,17 +82,17 @@ def generate_fit_lines(indices, const, alpha1, alpha2, breakpoint):
     const : {float} The constant of the first linear fit.
     alpha1 : {float} The slope of the first linear fit.
     alpha2 : {float} The slope of the second linear fit.
-    breakpoint : {float} The point at which the gradient changes from alpha1 to alpha2.
+    break_point : {float} The point at which the gradient changes from alpha1 to alpha2.
 
     Returns:
     --------
-    line1 : {pd.Series} the first line until breakpoint.
-    line2 : {pd.Series} the second line from breakpoint to first peak.
+    line1 : {pd.Series} the first line until break_point.
+    line2 : {pd.Series} the second line from break_point to first peak.
     """
 
     # Working with indices, the breaking point of the two lines must
     # be an integer
-    bp_int = int(breakpoint)
+    bp_int = int(break_point)
 
     # For the first line just take indices from start to the breakpoint
     indices_sel1 = indices[:bp_int]
@@ -71,23 +114,23 @@ def generate_fit_lines(indices, const, alpha1, alpha2, breakpoint):
     return pd.Series(line1, index=indices_sel1), pd.Series(line2, index=indices_sel2)
 
 
-def get_interpolated_timestamp(datetimes, breakpoint):
+def get_interpolated_timestamp(datetimes, break_point) -> pd.Timestamp:
     """
     Finds a timestamp from a series that relates to a floating-point index rather than integer.
 
     Parameters:
     -----------
     datetimes : {DatetimeIndex or similar}
-    breakpoint : {float}
+    break_point : {float}
     
     Returns:
     ----------
-    interpolated_timestamp : {Timestamp}
+    interpolated_timestamp : {pd.Timestamp}
     """
 
     # The "floor" of the index and the fractional part separately
-    lower_index = int(breakpoint)
-    fractional_part = breakpoint - lower_index
+    lower_index = int(break_point)
+    fractional_part = break_point - lower_index
 
     # State the two timestamps to interpolate between
     lower_timestamp = datetimes[lower_index]
@@ -99,15 +142,20 @@ def get_interpolated_timestamp(datetimes, breakpoint):
     return interpolated_timestamp
 
 
-def search_first_peak(ints, window=None, threshold=None):
+def search_first_peak(ints, window=None, threshold=None) -> tuple[float, int]:
     """
     Searches for a local maximum for a given window.
-    
+
+    Parameters:
+    -----------
     ints : {array-like}
-    
     window : {int}
-    
     threshold : {float}
+
+    Returns:
+    ---------
+    max_val : {float}
+    max_idx : {int}
     """
 
     # Check that there are no nans

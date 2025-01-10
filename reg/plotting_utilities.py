@@ -6,6 +6,7 @@ Contains plotting utility functions and constants.
 __author__ = "Christian Palmroos"
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 # Constants:
 STANDARD_FIGSIZE = (26,11)
@@ -20,7 +21,7 @@ STANDARD_MINOR_TICKLEN = 8
 STANDARD_MAJOR_TICKWIDTH = 2.8
 STANDARD_MINOR_TICKWIDTH = 2.1
 
-def set_standard_ticks(ax, labelsize:int=None):
+def set_standard_ticks(ax, labelsize:int=None) -> None:
     """
     Handles tickmarks, their sizes etc...
     """
@@ -30,3 +31,13 @@ def set_standard_ticks(ax, labelsize:int=None):
 
     ax.tick_params(which="major", length=STANDARD__MAJOR_TICKLEN, width=STANDARD_MAJOR_TICKWIDTH, labelsize=labelsize)
     ax.tick_params(which="minor", length=STANDARD_MINOR_TICKLEN, width=STANDARD_MINOR_TICKWIDTH, labelsize=labelsize-5)
+
+def set_xlims(ax:plt.Axes, data:pd.DataFrame, xlim:list) -> None:
+    """
+    Sets the x-axis boundaries for the plot
+    """
+
+    if xlim is None:
+        ax.set_xlim(data.index.values[0], data.index.values[-1])
+    else:
+        ax.set_xlim(pd.to_datetime(xlim[0]), pd.to_datetime(xlim[1]))
