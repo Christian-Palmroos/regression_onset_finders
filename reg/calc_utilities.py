@@ -1,6 +1,7 @@
 
 """
-Contains calculation utility functions and constants.
+Contains calculation utility functions and constants for linear regression model -based SEP event onset analysis
+python package.
 """
 
 __author__ = "Christian Palmroos"

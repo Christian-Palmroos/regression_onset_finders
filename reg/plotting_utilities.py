@@ -1,6 +1,7 @@
 
 """
 Contains plotting utility functions and constants.
+
 """
 
 __author__ = "Christian Palmroos"
@@ -20,6 +21,7 @@ STANDARD_MINOR_TICKLEN = 8
 
 STANDARD_MAJOR_TICKWIDTH = 2.8
 STANDARD_MINOR_TICKWIDTH = 2.1
+
 
 def set_standard_ticks(ax, labelsize:int=None) -> None:
     """
