@@ -34,9 +34,15 @@ def set_standard_ticks(ax, labelsize:int=None) -> None:
     ax.tick_params(which="major", length=STANDARD__MAJOR_TICKLEN, width=STANDARD_MAJOR_TICKWIDTH, labelsize=labelsize)
     ax.tick_params(which="minor", length=STANDARD_MINOR_TICKLEN, width=STANDARD_MINOR_TICKWIDTH, labelsize=labelsize-5)
 
-def set_xlims(ax:plt.Axes, data:pd.DataFrame, xlim:list) -> None:
+def set_xlims(ax:plt.Axes, data:pd.DataFrame, xlim:list[str]) -> None:
     """
     Sets the x-axis boundaries for the plot
+
+    Parameters:
+    -----------
+    ax : {plt.Axes} The axes of the figure.
+    data : {pd.DataFrame} The data being plotted.
+    xlim : {list[str]} A pair of datetime strings to set the plot boundaries.
     """
 
     if xlim is None:
