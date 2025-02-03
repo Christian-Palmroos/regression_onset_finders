@@ -94,6 +94,9 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
 
     if plot:
 
+        #
+        # TODO:
+        # Implement diagnostics displaying the selection of data to the fit lines
         if diagnostics:
             # Generate the fit lines to display on the plot
             line1, line2 = calc.generate_fit_lines(indices=numerical_indices, const=const,
