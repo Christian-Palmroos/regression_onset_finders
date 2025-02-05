@@ -9,7 +9,7 @@ __author__ = "Christian Palmroos"
 import numpy as np
 import pandas as pd
 
-def resample_df(df, avg) -> pd.DataFrame:
+def resample_df(df:pd.DataFrame, avg:str) -> pd.DataFrame:
     """
     Resamples a dataframe such that care is taken on the offset and origin of the data index.
 
@@ -45,7 +45,7 @@ def ints2log10(intensity, fill_style="bfill") -> pd.Series:
     logints : {pd.Series}
     """
 
-    VALID_FILL_STYLES = ("bfill", "ffill")
+    VALID_FILL_STYLES = ("bfill", "ffill", "nan")
 
     # At the start check that the filling style is valid
     if fill_style not in VALID_FILL_STYLES:
@@ -70,6 +70,9 @@ def ints2log10(intensity, fill_style="bfill") -> pd.Series:
         case "ffill":
             logints.ffill(inplace=True)
 
+        case "nan":
+            pass
+
     return logints
 
 
@@ -91,16 +94,12 @@ def generate_fit_lines(indices, const, alpha1, alpha2, break_point) -> tuple[pd.
     line2 : {pd.Series} the second line from break_point to first peak.
     """
 
-    # Working with indices, the breaking point of the two lines must
-    # be an integer
-    bp_int = int(break_point)
-
     # For the first line just take indices from start to the breakpoint
-    indices_sel1 = indices[:bp_int]
+    indices_sel1 = indices[indices<break_point]
 
     # For the second part we need two sets of indices; one running from 0 -> len(indices2)
     # to calculate the values, and the latter part of indices itself to index the values.
-    indices_sel2 = indices[bp_int:]
+    indices_sel2 = indices[indices>=break_point]
     num_indices2 = len(indices_sel2)
 
     # The first line is generated very simply from start to breakpoint
@@ -161,7 +160,8 @@ def search_first_peak(ints, window=None, threshold=None) -> tuple[float, int]:
 
     # Check that there are no nans
     if np.isnan(ints).any():
-        raise ValueError("NaN values are not permitted!")
+        pass
+        # raise ValueError("NaN values are not permitted!")
 
     # Default window length is 30 data points
     if window is None:

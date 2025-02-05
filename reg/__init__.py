@@ -14,13 +14,32 @@ from matplotlib.dates import DateFormatter
 
 import piecewise_regression
 
-# Relative imports cannot be used with "import .a" form; use "from . import a" insteadPylance
+# Relative imports cannot be used with "import .a" form; use "from . import a" instead. -Pylance
 from . import calc_utilities as calc
 from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_FIGSIZE, STANDARD_LEGENDSIZE
 
+INDEX_NUMBER_COL_NAME = "time_s"
+COUNTING_NUMBERS_COL_NAME = "counting_numbers"
+
+def select_channel_nonzero_ints(df:pd.DataFrame, channel:str):
+
+    counting_numbers =  np.linspace(start=0, stop=len(df)-1, num=len(df))
+    df[COUNTING_NUMBERS_COL_NAME] = counting_numbers.astype(int)
+
+    selection = df[[channel, INDEX_NUMBER_COL_NAME, COUNTING_NUMBERS_COL_NAME]]
+    selection = selection.loc[selection[channel]!=0]
+    return selection
+
+
+def produce_index_numbers(df:pd.DataFrame):
+    index_numbers = df.index.strftime("%s")
+    df[INDEX_NUMBER_COL_NAME] = index_numbers.astype(int)
+    return df
+
 
 def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:str="bfill",
-            window:int=None, threshold:float=None, plot:bool=True, diagnostics=False):
+            window:int=None, threshold:float=None, plot:bool=True, diagnostics=False,
+            index_choice="time_s"):
     """
     Seeks for the first peak in the given data. Cuts the data and only considers that part which comes
     before the first peak. In this chosen part, seek a break in the linear trend that is the background
@@ -53,19 +72,26 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
     else:
         data = data.copy(deep=True)
 
-    # Choose channel
-    series = data[channel]
+    # Select the channel and produce indices for them. The indices are stored in the 
+    # column "time_s", for they read seconds since the Epoch (1970-01-01 00:00).
+    # The index numbers are used for the regression algorithm instead of datetime values. 
+    data = produce_index_numbers(df=data)
+    data = select_channel_nonzero_ints(df=data, channel=channel)
 
     # Convert to log
-    series = calc.ints2log10(intensity=series, fill_style=fill_style)
-    plot_series = calc.ints2log10(intensity=data[channel])
+    series = calc.ints2log10(intensity=data[channel])
+    # plot_series = calc.ints2log10(intensity=data[channel])
+    plot_series = series.copy(deep=True)
 
     # Get the numerical index of the first peak to choose the selection from 
     # background to first peak. Also generate numerical index to run from 0 to max_idx
     max_val, max_idx = calc.search_first_peak(ints=series, window=window, threshold=threshold)
 
+    # Apply a slice/selection to the data series and the numerical indices (seconds since Epoch)
+    # according to the first peak found
     series = series[:max_idx]
-    numerical_indices = np.linspace(start=0, stop=max_idx, num=max_idx)
+
+    numerical_indices = data[index_choice].values[:max_idx]
 
     # Get the fit results
     fit_results = break_regression(ints=series.values, indices=numerical_indices)
@@ -80,10 +106,26 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
     break_point = estimates["breakpoint1"]["estimate"]
     break_point_errs = estimates["breakpoint1"]["confidence_interval"]
 
+    # return estimates, data, series
+
     # Finds corresponding timestamps to the numerical indices
-    onset_time = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point)
-    onset_time_minus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_errs[0])
-    onset_time_plus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_errs[1])
+    if index_choice == "counting_numbers":
+        # Choose the LAST entry of a linear space of integers that map to numerical_indices smaller than
+        # the break_point. This is how manieth data point break_point is in series.
+        lin_idx = np.linspace(start=0, stop=len(series)-1, num=len(series))
+        break_point_idx = lin_idx[numerical_indices<break_point][-1]
+        break_point_err_minus_idx = lin_idx[numerical_indices<break_point_errs[0]][-1]
+        break_point_err_plus_idx = lin_idx[numerical_indices<break_point_errs[1]][-1]
+        # onset_time = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point)
+        # onset_time_minus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_errs[0])
+        # onset_time_plus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_errs[1])
+        onset_time = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_idx)
+        onset_time_minus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_minus_idx)
+        onset_time_plus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_plus_idx)
+    else:
+        onset_time = pd.to_datetime(break_point, unit='s')
+        onset_time_minus_err = pd.to_datetime(break_point_errs[0], unit='s')
+        onset_time_plus_err = pd.to_datetime(break_point_errs[1], unit='s')
 
     results_dict = {"const": const,
                     "slope1": alpha1,
@@ -94,26 +136,26 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
 
     if plot:
 
-        #
-        # TODO:
-        # Implement diagnostics displaying the selection of data to the fit lines
+        # Init figure
+        fig, ax = plt.subplots(figsize=STANDARD_FIGSIZE)
+
         if diagnostics:
             # Generate the fit lines to display on the plot
             line1, line2 = calc.generate_fit_lines(indices=numerical_indices, const=const,
                                                 alpha1=alpha1, alpha2=alpha2, break_point=break_point)
-            
-            # Plot the fit results on the real data
-            ax.plot(series.index[:len(line1)], line1.values, lw=2, ls="--", c="maroon", zorder=2)
-            ax.plot(series.index[-len(line2):], line2.values, lw=2, ls="--", c="maroon", zorder=2)
 
-        # Init figure
-        fig, ax = plt.subplots(figsize=STANDARD_FIGSIZE)
+            # Plot the fit results on the real data
+            ax.plot(series.index[:len(line1)], line1.values, lw=2.8, ls="--", c="maroon", zorder=3)
+            ax.plot(series.index[-len(line2):], line2.values, lw=2.8, ls="-.", c="maroon", zorder=3)
+
+            # Apply a span over xmin=start and xmax=max_idx to display the are considered for the fit
+            ax.axvspan(xmin=series.index[0], xmax=series.index[-1], facecolor="green", alpha=0.1)
 
         ax.set_ylabel("Log(intensity)", fontsize=STANDARD_LEGENDSIZE)
 
         # Plot the intensities
-        ax.step(plot_series.index, plot_series.values, label=channel)
-        # ax.step(series.index, series.values, label=channel)
+        # ax.step(plot_series.index, plot_series.values, label=channel, zorder=1)
+        ax.scatter(plot_series.index, plot_series.values, label=channel, zorder=1)
 
         ax.axvspan(xmin=onset_time_minus_err, xmax=onset_time_plus_err, alpha=0.20, color="red")
         ax.axvline(x=onset_time, c="red", lw=1.8, label=f"onset time: {onset_time.strftime('%H:%M:%S')}")
@@ -128,6 +170,13 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
         ax.set_xlabel(f"date of {onset_time.strftime('%b %Y')}", fontsize=STANDARD_LEGENDSIZE)
 
         plt.show()
+
+    # When diagnostics is enabled, return additional info about the run
+    if diagnostics:
+        results_dict["line1"] = line1
+        results_dict["line2"] = line2,
+        results_dict["series"] = series,
+        results_dict["indices"] = numerical_indices
 
     return results_dict
 
