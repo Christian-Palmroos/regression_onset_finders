@@ -38,7 +38,7 @@ def ints2log10(intensity, fill_style="bfill") -> pd.Series:
     Parameters:
     -----------
     intensity : {pd.Series}
-    fill_style : {str} either 'bfill' or 'ffill'
+    fill_style : {str} either 'bfill', 'ffill' or 'nan'
     
     Returns:
     ----------
@@ -160,8 +160,7 @@ def search_first_peak(ints, window=None, threshold=None) -> tuple[float, int]:
 
     # Check that there are no nans
     if np.isnan(ints).any():
-        pass
-        # raise ValueError("NaN values are not permitted!")
+        raise ValueError("NaN values are not permitted!")
 
     # Default window length is 30 data points
     if window is None:

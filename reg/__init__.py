@@ -39,7 +39,7 @@ def produce_index_numbers(df:pd.DataFrame):
 
 def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:str="bfill",
             window:int=None, threshold:float=None, plot:bool=True, diagnostics=False,
-            index_choice="time_s"):
+            index_choice="time_s", plot_style="step"):
     """
     Seeks for the first peak in the given data. Cuts the data and only considers that part which comes
     before the first peak. In this chosen part, seek a break in the linear trend that is the background
@@ -57,6 +57,8 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
     threshold : {float}
     plot : {bool}
     diagnostics : {bool}
+    index_choice : {str}
+    plot_style : {str} Either 'step' or 'scatter'
 
     Returns:
     ----------
@@ -106,8 +108,6 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
     break_point = estimates["breakpoint1"]["estimate"]
     break_point_errs = estimates["breakpoint1"]["confidence_interval"]
 
-    # return estimates, data, series
-
     # Finds corresponding timestamps to the numerical indices
     if index_choice == "counting_numbers":
         # Choose the LAST entry of a linear space of integers that map to numerical_indices smaller than
@@ -154,8 +154,10 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
         ax.set_ylabel("Log(intensity)", fontsize=STANDARD_LEGENDSIZE)
 
         # Plot the intensities
-        # ax.step(plot_series.index, plot_series.values, label=channel, zorder=1)
-        ax.scatter(plot_series.index, plot_series.values, label=channel, zorder=1)
+        if plot_style=="step":
+            ax.step(plot_series.index, plot_series.values, label=channel, zorder=1)
+        if plot_style=="scatter":
+            ax.scatter(plot_series.index, plot_series.values, label=channel, zorder=1)
 
         ax.axvspan(xmin=onset_time_minus_err, xmax=onset_time_plus_err, alpha=0.20, color="red")
         ax.axvline(x=onset_time, c="red", lw=1.8, label=f"onset time: {onset_time.strftime('%H:%M:%S')}")
