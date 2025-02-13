@@ -9,6 +9,43 @@ __author__ = "Christian Palmroos"
 import numpy as np
 import pandas as pd
 
+
+# Global constants
+INDEX_NUMBER_COL_NAME = "time_s"
+COUNTING_NUMBERS_COL_NAME = "counting_numbers"
+
+
+def select_channel_nonzero_ints(df:pd.DataFrame, channel:str, dropnan:bool=True):
+    """
+    Selects the intensities (values) from the dataframe[channel] selection such that
+    no zeroes are left in the dataframe. Also drops nans if dropnan (default True) is 
+    enabled.
+    """
+
+    # Work on a copy to not alter the original one
+    df = df.copy(deep=True)
+
+    counting_numbers =  np.linspace(start=0, stop=len(df)-1, num=len(df))
+    df[COUNTING_NUMBERS_COL_NAME] = counting_numbers.astype(int)
+
+    selection = df[[channel, INDEX_NUMBER_COL_NAME, COUNTING_NUMBERS_COL_NAME]]
+    selection = selection.loc[selection[channel]!=0]
+
+    if dropnan:
+        # Selects the entries for which "channel" column has no nans
+        selection = selection[~selection[channel].isnull()]
+
+    return selection
+
+
+def produce_index_numbers(df:pd.DataFrame):
+    # Work on a copy to not alter the original one
+    df = df.copy(deep=True)
+    index_numbers = df.index.strftime("%s")
+    df[INDEX_NUMBER_COL_NAME] = index_numbers.astype(int)
+    return df
+
+
 def resample_df(df:pd.DataFrame, avg:str) -> pd.DataFrame:
     """
     Resamples a dataframe such that care is taken on the offset and origin of the data index.
@@ -30,26 +67,18 @@ def resample_df(df:pd.DataFrame, avg:str) -> pd.DataFrame:
     return copy_df
 
 
-def ints2log10(intensity, fill_style="bfill") -> pd.Series:
+def ints2log10(intensity) -> pd.Series:
     """
-    Converts intensities to log(intensity). Fills -infs with 
-    fill_style.
-    
+    Converts intensities to log(intensity).
+
     Parameters:
     -----------
     intensity : {pd.Series}
-    fill_style : {str} either 'bfill', 'ffill' or 'nan'
-    
+
     Returns:
     ----------
     logints : {pd.Series}
     """
-
-    VALID_FILL_STYLES = ("bfill", "ffill", "nan")
-
-    # At the start check that the filling style is valid
-    if fill_style not in VALID_FILL_STYLES:
-        raise ValueError(f"Parameter fill_style must be in {VALID_FILL_STYLES}")
 
     # Takes the logarithm of the ints
     logints = np.log10(intensity)
@@ -57,21 +86,6 @@ def ints2log10(intensity, fill_style="bfill") -> pd.Series:
     # There may be zeroes in the intensities, which get converted to -inf
     # Convert -infs to nan
     logints.replace([np.inf, -np.inf], np.nan, inplace=True)
-
-    # Finally fill all the nans with the selected style
-    match fill_style:
-
-        # For a reason I don't understand it's not possible to match-case against elements of 
-        # VALID_FILL_STYLES here, and instead I'm forced to spell them out as strings. The current
-        # implementation is inelegant and vexes me.
-        case "bfill":
-            logints.bfill(inplace=True)
-
-        case "ffill":
-            logints.ffill(inplace=True)
-
-        case "nan":
-            pass
 
     return logints
 

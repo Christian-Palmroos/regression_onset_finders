@@ -18,26 +18,10 @@ import piecewise_regression
 from . import calc_utilities as calc
 from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_FIGSIZE, STANDARD_LEGENDSIZE
 
-INDEX_NUMBER_COL_NAME = "time_s"
-COUNTING_NUMBERS_COL_NAME = "counting_numbers"
-
-def select_channel_nonzero_ints(df:pd.DataFrame, channel:str):
-
-    counting_numbers =  np.linspace(start=0, stop=len(df)-1, num=len(df))
-    df[COUNTING_NUMBERS_COL_NAME] = counting_numbers.astype(int)
-
-    selection = df[[channel, INDEX_NUMBER_COL_NAME, COUNTING_NUMBERS_COL_NAME]]
-    selection = selection.loc[selection[channel]!=0]
-    return selection
+from .validate import _validate_index_choice, _validate_plot_style
 
 
-def produce_index_numbers(df:pd.DataFrame):
-    index_numbers = df.index.strftime("%s")
-    df[INDEX_NUMBER_COL_NAME] = index_numbers.astype(int)
-    return df
-
-
-def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:str="bfill",
+def workflow(data, channel:str, resample:str=None, xlim:list=None,
             window:int=None, threshold:float=None, plot:bool=True, diagnostics=False,
             index_choice="time_s", plot_style="step"):
     """
@@ -52,7 +36,6 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
     channel : {str}
     resample : {str}
     xlim : {list}
-    fill_style : {str}
     window : {str}
     threshold : {float}
     plot : {bool}
@@ -66,6 +49,10 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
                           'break_point' and 'break_errors'.
     """
 
+    # Run checks
+    _validate_index_choice(index_choice=index_choice)
+    _validate_plot_style(plot_style=plot_style)
+
     # Choose resampling:
     if isinstance(resample, str):
         data = calc.resample_df(df=data, avg=resample)
@@ -76,9 +63,9 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
 
     # Select the channel and produce indices for them. The indices are stored in the 
     # column "time_s", for they read seconds since the Epoch (1970-01-01 00:00).
-    # The index numbers are used for the regression algorithm instead of datetime values. 
-    data = produce_index_numbers(df=data)
-    data = select_channel_nonzero_ints(df=data, channel=channel)
+    # The index numbers can be used for the regression algorithm instead of datetime values. 
+    data = calc.produce_index_numbers(df=data)
+    data = calc.select_channel_nonzero_ints(df=data, channel=channel)
 
     # Convert to log
     series = calc.ints2log10(intensity=data[channel])
@@ -144,9 +131,16 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None, fill_style:st
             line1, line2 = calc.generate_fit_lines(indices=numerical_indices, const=const,
                                                 alpha1=alpha1, alpha2=alpha2, break_point=break_point)
 
+            if index_choice=="counting_numbers:":
+                line1_datetimes = series.index[:len(line1)]
+                line1_datetimes = series.index[len(line1):]
+            else:
+                line1_datetimes = pd.to_datetime(line1.index, unit='s')
+                line2_datetimes = pd.to_datetime(line2.index, unit='s')
+
             # Plot the fit results on the real data
-            ax.plot(series.index[:len(line1)], line1.values, lw=2.8, ls="--", c="maroon", zorder=3)
-            ax.plot(series.index[-len(line2):], line2.values, lw=2.8, ls="-.", c="maroon", zorder=3)
+            ax.plot(line1_datetimes, line1.values, lw=2.8, ls="--", c="maroon", zorder=3)
+            ax.plot(line2_datetimes, line2.values, lw=2.8, ls=":", c="maroon", zorder=3)
 
             # Apply a span over xmin=start and xmax=max_idx to display the are considered for the fit
             ax.axvspan(xmin=series.index[0], xmax=series.index[-1], facecolor="green", alpha=0.1)
