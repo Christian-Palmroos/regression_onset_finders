@@ -131,16 +131,16 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
             line1, line2 = calc.generate_fit_lines(indices=numerical_indices, const=const,
                                                 alpha1=alpha1, alpha2=alpha2, break_point=break_point)
 
-            if index_choice=="counting_numbers:":
+            if index_choice=="counting_numbers":
                 line1_datetimes = series.index[:len(line1)]
-                line1_datetimes = series.index[len(line1):]
+                line2_datetimes = series.index[len(line1):]
             else:
                 line1_datetimes = pd.to_datetime(line1.index, unit='s')
                 line2_datetimes = pd.to_datetime(line2.index, unit='s')
 
             # Plot the fit results on the real data
             ax.plot(line1_datetimes, line1.values, lw=2.8, ls="--", c="maroon", zorder=3)
-            ax.plot(line2_datetimes, line2.values, lw=2.8, ls=":", c="maroon", zorder=3)
+            ax.plot(line2_datetimes, line2.values, lw=3.2, ls=":", c="maroon", zorder=3)
 
             # Apply a span over xmin=start and xmax=max_idx to display the are considered for the fit
             ax.axvspan(xmin=series.index[0], xmax=series.index[-1], facecolor="green", alpha=0.1)
