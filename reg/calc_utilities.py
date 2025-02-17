@@ -148,7 +148,11 @@ def get_interpolated_timestamp(datetimes, break_point) -> pd.Timestamp:
 
     # State the two timestamps to interpolate between
     lower_timestamp = datetimes[lower_index]
-    upper_timestamp = datetimes[lower_index+1]
+    try:
+        upper_timestamp = datetimes[lower_index+1]
+    except IndexError as ie:
+        print(ie, fractional_part)
+        upper_timestamp = lower_timestamp
 
     # Calculate the interpolated timestamp
     interpolated_timestamp = lower_timestamp + fractional_part * (upper_timestamp - lower_timestamp)
@@ -191,7 +195,7 @@ def search_first_peak(ints, window=None, threshold=None) -> tuple[float, int]:
     for idx, val in enumerate(ints):
 
         # Just do nothing until we hit threshold
-        if val < threshold and not threshold_hit:
+        if val < max_val and not threshold_hit:
             warnings = 0
             continue
 
