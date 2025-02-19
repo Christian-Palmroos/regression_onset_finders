@@ -214,7 +214,7 @@ def search_first_peak(ints, window=None, threshold=None) -> tuple[float, int]:
     # values that were found. Unless the threshold was set too high, in which case
     # raise an exception.
     try:
-        x =max_idx
+        _ = max_idx
     except UnboundLocalError as ule:
         print(ule)
         raise ValueError("The parameter 'threshold' was set higher than any value in the intensity time series. Either set the threshold lower, or don't give it as an input.")

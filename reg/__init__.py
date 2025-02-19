@@ -20,13 +20,14 @@ from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_FIGSIZE,
 
 from .validate import _validate_index_choice, _validate_plot_style
 
+DEFAULT_NUM_OF_BREAKPOINTS = 1
 
 def workflow(data, channel:str, resample:str=None, xlim:list=None,
             window:int=None, threshold:float=None, plot:bool=True, diagnostics=False,
-            index_choice="time_s", plot_style="step"):
+            index_choice="time_s", plot_style="step", breaks=1):
     """
     Seeks for the first peak in the given data. Cuts the data and only considers that part which comes
-    before the first peak. In this chosen part, seek a break in the linear trend that is the background
+    before the first peak. In this chosen part, seek (a) break/s in the linear trend that is the background
     of the event. The break corresponds to the start of the event, and the second linear fit corresponds
     to the slope of the rising phase of the event (the linear slope of the 10-based logarithm).
 
@@ -42,6 +43,7 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
     diagnostics : {bool}
     index_choice : {str}
     plot_style : {str} Either 'step' or 'scatter'
+    breaks : {int} Number of breaks
 
     Returns:
     ----------
@@ -83,7 +85,7 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
     numerical_indices = data[index_choice].values[:max_idx]
 
     # Get the fit results
-    fit_results = break_regression(ints=series.values, indices=numerical_indices)
+    fit_results = break_regression(ints=series.values, indices=numerical_indices, num_of_breaks=breaks)
 
     # The results are a dictionary, extract values here
     estimates = fit_results["estimates"]
@@ -177,14 +179,30 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
     return results_dict
 
 
-def break_regression(ints, indices, starting_values:list=None) -> dict:
+def break_regression(ints, indices, starting_values:list=None, num_of_breaks:int=None) -> dict:
+    """
+    Initializes the Fit of piecewise_regression package, effectively running the algorithm for
+    given data.
 
-    NUM_OF_BREAKPOINTS = 1
+    Parameters:
+    -----------
+    ints : {array-like} The intensity (logarithms)
+    indices : {array-like} The x-axis values (ordinal numbers or such)
+    starting_values : {list}
+    num_of_breaks : {int} Number of expected breakpoints.
+
+    Returns:
+    --------
+    fit_results : {dict} A dictionary that contains the results of analysis.
+    """
+
+    if num_of_breaks is None:
+        num_of_breaks = DEFAULT_NUM_OF_BREAKPOINTS
 
     fit = piecewise_regression.Fit(xx=indices,
                                    yy=ints,
                                    start_values=starting_values,
-                                   n_breakpoints=NUM_OF_BREAKPOINTS)
+                                   n_breakpoints=num_of_breaks)
 
     return fit.get_results()
 
