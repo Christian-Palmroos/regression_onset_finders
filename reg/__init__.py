@@ -21,6 +21,7 @@ from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_FIGSIZE,
 from .validate import _validate_index_choice, _validate_plot_style
 
 DEFAULT_NUM_OF_BREAKPOINTS = 1
+DEFAULT_SELECTION_ALPHA = 0.12
 
 def workflow(data, channel:str, resample:str=None, xlim:list=None,
             window:int=None, threshold:float=None, plot:bool=True, diagnostics=False,
@@ -71,7 +72,7 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
 
     # Convert to log
     series = calc.ints2log10(intensity=data[channel])
-    # plot_series = calc.ints2log10(intensity=data[channel])
+    # This is what's getting plotted
     plot_series = series.copy(deep=True)
 
     # Get the numerical index of the first peak to choose the selection from 
@@ -81,47 +82,26 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
     # Apply a slice/selection to the data series and the numerical indices (seconds since Epoch)
     # according to the first peak found
     series = series[:max_idx]
-
     numerical_indices = data[index_choice].values[:max_idx]
 
     # Get the fit results
     fit_results = break_regression(ints=series.values, indices=numerical_indices, num_of_breaks=breaks)
 
-    # The results are a dictionary, extract values here
+    #return fit_results
+    # The results are a dictionary, extract values here. Also check that the result converged.
+    regression_converged = fit_results["converged"]
     estimates = fit_results["estimates"]
 
-    const = estimates["const"]["estimate"]
-    alpha1 = estimates["alpha1"]["estimate"]
-    alpha2 = estimates["alpha2"]["estimate"]
-
-    break_point = estimates["breakpoint1"]["estimate"]
-    break_point_errs = estimates["breakpoint1"]["confidence_interval"]
-
+    const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs = unpack_fit_results(fit_results=estimates,
+                                                                                             num_of_breaks=breaks)
+    print(list_of_alphas)
     # Finds corresponding timestamps to the numerical indices
-    if index_choice == "counting_numbers":
-        # Choose the LAST entry of a linear space of integers that map to numerical_indices smaller than
-        # the break_point. This is how manieth data point break_point is in series.
-        lin_idx = np.linspace(start=0, stop=len(series)-1, num=len(series))
-        break_point_idx = lin_idx[numerical_indices<break_point][-1]
-        break_point_err_minus_idx = lin_idx[numerical_indices<break_point_errs[0]][-1]
-        break_point_err_plus_idx = lin_idx[numerical_indices<break_point_errs[1]][-1]
-        # onset_time = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point)
-        # onset_time_minus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_errs[0])
-        # onset_time_plus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_errs[1])
-        onset_time = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_idx)
-        onset_time_minus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_minus_idx)
-        onset_time_plus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_plus_idx)
-    else:
-        onset_time = pd.to_datetime(break_point, unit='s')
-        onset_time_minus_err = pd.to_datetime(break_point_errs[0], unit='s')
-        onset_time_plus_err = pd.to_datetime(break_point_errs[1], unit='s')
+    list_of_dt_breakpoints, list_of_dt_breakpoint_errs = breakpoints_to_datetime(series=series, numerical_indices=numerical_indices,
+                                                                                 list_of_breakpoints=list_of_breakpoints,
+                                                                                 list_of_breakpoint_errs=list_of_breakpoint_errs,
+                                                                                 index_choice=index_choice)
 
-    results_dict = {"const": const,
-                    "slope1": alpha1,
-                    "slope2": alpha2,
-                    "onset_time": onset_time,
-                    "onset_time_error_minus": onset_time_minus_err,
-                    "onset_time_error_plus": onset_time_plus_err}
+    results_dict = {"const": const}
 
     if plot:
 
@@ -129,23 +109,18 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
         fig, ax = plt.subplots(figsize=STANDARD_FIGSIZE)
 
         if diagnostics:
+            print(f"Regression converged: {regression_converged}")
             # Generate the fit lines to display on the plot
-            line1, line2 = calc.generate_fit_lines(indices=numerical_indices, const=const,
-                                                alpha1=alpha1, alpha2=alpha2, break_point=break_point)
-
-            if index_choice=="counting_numbers":
-                line1_datetimes = series.index[:len(line1)]
-                line2_datetimes = series.index[len(line1):]
-            else:
-                line1_datetimes = pd.to_datetime(line1.index, unit='s')
-                line2_datetimes = pd.to_datetime(line2.index, unit='s')
+            list_of_fit_series = calc.generate_fit_lines(indices=numerical_indices, series=series, const=const,
+                                                        list_of_alphas=list_of_alphas, 
+                                                        list_of_breakpoints=list_of_breakpoints)
 
             # Plot the fit results on the real data
-            ax.plot(line1_datetimes, line1.values, lw=2.8, ls="--", c="maroon", zorder=3)
-            ax.plot(line2_datetimes, line2.values, lw=3.2, ls=":", c="maroon", zorder=3)
+            for line in list_of_fit_series:
+                ax.plot(line.index, line.values, lw=2.8, ls="--", c="maroon", zorder=3)
 
             # Apply a span over xmin=start and xmax=max_idx to display the are considered for the fit
-            ax.axvspan(xmin=series.index[0], xmax=series.index[-1], facecolor="green", alpha=0.1)
+            ax.axvspan(xmin=series.index[0], xmax=series.index[-1], facecolor="green", alpha=DEFAULT_SELECTION_ALPHA)
 
         ax.set_ylabel("Log(intensity)", fontsize=STANDARD_LEGENDSIZE)
 
@@ -155,8 +130,10 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
         if plot_style=="scatter":
             ax.scatter(plot_series.index, plot_series.values, label=channel, zorder=1)
 
-        ax.axvspan(xmin=onset_time_minus_err, xmax=onset_time_plus_err, alpha=0.20, color="red")
-        ax.axvline(x=onset_time, c="red", lw=1.8, label=f"onset time: {onset_time.strftime('%H:%M:%S')}")
+        for i, breakpoint_dt in enumerate(list_of_dt_breakpoints):
+
+            ax.axvspan(xmin=list_of_dt_breakpoint_errs[i][0], xmax=list_of_dt_breakpoint_errs[i][1], alpha=0.20, color="red")
+            ax.axvline(x=breakpoint_dt, c="red", lw=1.8, label=f"breakpoint{i}: {breakpoint_dt.strftime('%H:%M:%S')}")
 
         ax.legend(fontsize=STANDARD_LEGENDSIZE)
 
@@ -165,18 +142,18 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
 
         # Format the x-axis
         ax.xaxis.set_major_formatter(DateFormatter("%H:%M\n%d"))
-        ax.set_xlabel(f"date of {onset_time.strftime('%b %Y')}", fontsize=STANDARD_LEGENDSIZE)
+        ax.set_xlabel(f"date of {breakpoint_dt.strftime('%b %Y')}", fontsize=STANDARD_LEGENDSIZE)
 
         plt.show()
 
     # When diagnostics is enabled, return additional info about the run
     if diagnostics:
-        results_dict["line1"] = line1
-        results_dict["line2"] = line2,
         results_dict["series"] = series,
         results_dict["indices"] = numerical_indices
+    
+    results_dict["line"] = list_of_fit_series[1]
 
-    return results_dict
+    return results_dict, data
 
 
 def break_regression(ints, indices, starting_values:list=None, num_of_breaks:int=None) -> dict:
@@ -205,6 +182,89 @@ def break_regression(ints, indices, starting_values:list=None, num_of_breaks:int
                                    n_breakpoints=num_of_breaks)
 
     return fit.get_results()
+
+
+def unpack_fit_results(fit_results:dict, num_of_breaks:int) -> tuple:
+        """
+        
+        Parameters:
+        -----------
+        fit_results : {dict}
+
+        Returns:
+        -----------
+        const : {float} The constant of the first fit
+        list_of_alphas : {list[float]} A list of slopes for the polynomial fits.
+        list_of_breakpoints : {list[float]} A list of breakpoints for the fits.
+        """
+
+        # The constant and slope of the first fit are always there.
+        const = fit_results["const"]["estimate"]
+        alpha = fit_results["alpha1"]["estimate"]
+
+        list_of_alphas = [alpha]
+        list_of_breakpoints = []
+        list_of_breakpoint_errs = []
+        # For a single break, there will be one iteration in the loop -> one additional slope. 
+        for i in range(num_of_breaks):
+
+            alpha = fit_results[f"alpha{i+1}"]["estimate"]
+            break_point = fit_results[f"breakpoint{i+1}"]["estimate"]
+            break_point_errs = fit_results[f"breakpoint{i+1}"]["confidence_interval"]
+
+            list_of_alphas.append(alpha)
+            list_of_breakpoints.append(break_point)
+            list_of_breakpoint_errs.append(break_point_errs)
+        
+        return const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs
+
+
+def breakpoints_to_datetime(series:pd.Series, numerical_indices:np.ndarray, list_of_breakpoints:list, 
+                                list_of_breakpoint_errs:list, index_choice:str):
+        """
+        Converts breakpoints (along with their errors) that are floats to datetimes.
+
+        Parameters:
+        -----------
+        series : {pd.Series} The data series indexed by time.
+        numerical_indices : {np.ndarray} The numerical indices of data, either ordinal numbers or seconds.
+
+        list_of_breakpoints : {list[float]}
+        list_of_breakpoint_errs : {list[tuple]}
+        index_choice : {str} Either 'counting_numbers' or 'time_s'
+
+        Returns:
+        -----------
+        list_of_dt_breakpoints : {list[datetime]}
+        list_of_dt_breakpoint_errs : {list[tuple]}
+        """
+
+        list_of_dt_breakpoints = []
+        list_of_dt_breakpoint_errs = []
+
+        if index_choice == "counting_numbers":
+            # Choose the LAST entry of a linear space of integers that map to numerical_indices smaller than
+            # the break_point. This is "how manieth" data point break_point is in series.
+            lin_idx = np.linspace(start=0, stop=len(series)-1, num=len(series))
+            for i, break_point in enumerate(list_of_breakpoints):
+                break_point_idx = lin_idx[numerical_indices<break_point][-1]
+                break_point_err_minus_idx = lin_idx[numerical_indices<list_of_breakpoint_errs[i][0]][-1]
+                break_point_err_plus_idx = lin_idx[numerical_indices<list_of_breakpoint_errs[i][1]][-1]
+                breakpoint_dt = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_idx)
+                breakpoint_dt_minus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_minus_idx)
+                breakpoint_dt_plus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_plus_idx)
+                list_of_dt_breakpoints.append(breakpoint_dt)
+                list_of_dt_breakpoint_errs.append((breakpoint_dt_minus_err, breakpoint_dt_plus_err))
+        else:
+            for i, break_point in enumerate(list_of_breakpoints):
+                breakpoint_dt = pd.to_datetime(break_point, unit='s')
+                breakpoint_dt_minus_err = pd.to_datetime(list_of_breakpoint_errs[i][0], unit='s')
+                breakpoint_dt_plus_err = pd.to_datetime(list_of_breakpoint_errs[i][1], unit='s')
+                list_of_dt_breakpoints.append(breakpoint_dt)
+                list_of_dt_breakpoint_errs.append((breakpoint_dt_minus_err, breakpoint_dt_plus_err))
+        
+        return list_of_dt_breakpoints, list_of_dt_breakpoint_errs
+
 
 def quicklook(data:pd.DataFrame, channel:str=None, resample:str=None, xlim:list=None):
     """

@@ -90,43 +90,85 @@ def ints2log10(intensity) -> pd.Series:
     return logints
 
 
-def generate_fit_lines(indices, const, alpha1, alpha2, break_point) -> tuple[pd.Series, pd.Series]:
+def generate_fit_lines(series:pd.Series, indices:np.ndarray, const:float, list_of_alphas:list[float], 
+                       list_of_breakpoints:list[float]) -> list[pd.Series]:
     """
-    Generates two lines from fit parameters.
-    
+    Generates a list of first order polynomials as pandas Series from given fit parameters.
+
     Parameters:
     ----------
-    indices : {array-like} The numerical indices of the data, the x-axis.
+    series : {pd.Series} The intensity data series, indexed by time.
+    indices : {array-like} The numerical indices of the data, the x-axis. They are either ordinal numbers or seconds.
     const : {float} The constant of the first linear fit.
-    alpha1 : {float} The slope of the first linear fit.
-    alpha2 : {float} The slope of the second linear fit.
-    break_point : {float} The point at which the gradient changes from alpha1 to alpha2.
+    list_of_alphas : {list[float]} The slopes of the fits. Is always one longer than list_of_breakpoints.
+    list_of_breakpoints : {float} The breakpoints of the fit lines. Always one shorter than list_of_alphas.
 
     Returns:
     --------
-    line1 : {pd.Series} the first line until break_point.
-    line2 : {pd.Series} the second line from break_point to first peak.
+    list_of_lines : {list[pd.Series]} The lines.
     """
 
-    # For the first line just take indices from start to the breakpoint
-    indices_sel1 = indices[indices<break_point]
+    # Gather the index selections to this list. Each fit has its own selection of the total indices.
+    # The selections are separated by breakpoints in the fits. Also collect the list of line values
+    # to its own list.
+    list_of_index_selections = []
+    list_of_lines = []
+    for i, alpha in enumerate(list_of_alphas):
 
-    # For the second part we need two sets of indices; one running from 0 -> len(indices2)
-    # to calculate the values, and the latter part of indices itself to index the values.
-    indices_sel2 = indices[indices>=break_point]
-    num_indices2 = len(indices_sel2)
+        # Define the selection (start&end) and apply it to all indices. Save the selected slice to a list.
+        # For the start of the selection, first take 0, and then always index i-1 from breakpoints.
+        # For the end of the selection, always take ith breakpoint, except for the final (take len(indices)==final index)
+        selection_start = list_of_breakpoints[i-1] if i > 0 else 0
+        selection_end = list_of_breakpoints[i] if i < len(list_of_breakpoints) else len(indices)
+        index_selection = indices[(indices>=selection_start)&(indices<selection_end)]
+        list_of_index_selections.append(index_selection)
 
-    # The first line is generated very simply from start to breakpoint
-    line1 = indices_sel1 * alpha1 + const
+        # Choose the constant term for the 1st order polynomial:
+        if i == 0:
+            line_const = const
+        else:
+            # Depending on the orientation of the previous line, the next line starts from the max or the 
+            # min of the previous line.
+            line_const = np.nanmax(list_of_lines[i-1]) if list_of_alphas[i-1] > 0 else np.nanmin(list_of_lines[i-1])
 
-    # Depending on the orientation of the first line, line2 starts from the max or the min of the line1
-    if alpha1 > 0:
-        line2 = np.linspace(start=0, stop=num_indices2, num=num_indices2) * alpha2 + np.nanmax(line1)
+        # Generate the line and add it to the list of lines
+        line = (list_of_index_selections[i] * alpha) + line_const
+        list_of_lines.append(line)
+
+    # list_of_datetimes = generate_fits_datetimes(list_of_index_selections, series=series)
+    # Generate the list of series from list of lines (list of numpy arrays that contain the values of the lines)
+    # and from the list of indices (which contain the corresponding x-values to the lines)
+    list_of_series = [pd.Series(list_of_lines[i], index=list_of_index_selections[i]) for i in range(len(list_of_alphas))]
+
+    return list_of_series
+
+
+def generate_fits_datetimes(list_of_fits:list, series:pd.Series, index_choice:str):
+    """
+    
+    Parameters:
+    -----------
+    list_of_fits : {list[pd.Series]} Fits generated from fit parameters.
+    series : {pd.Series} the data series, indexed by time.
+    index_choice : {str} Either 'counting_numbers' or 'time_s'
+
+    Returns:
+    -----------
+    list_of_datetimes : {list[datetime]}
+    """
+
+    list_of_datetimes = []
+    if index_choice=="counting_numbers":
+        for fit in list_of_fits:
+            start_index = 0
+            datetimes = series.index[start_index]
+        line1_datetimes = series.index[:len(line1)]
+        line2_datetimes = series.index[len(line1):]
     else:
-        line2 = np.linspace(start=0, stop=num_indices2, num=num_indices2) * alpha2 + np.nanmin(line1)
-
-    return pd.Series(line1, index=indices_sel1), pd.Series(line2, index=indices_sel2)
-
+        line1_datetimes = pd.to_datetime(line1.index, unit='s')
+        line2_datetimes = pd.to_datetime(line2.index, unit='s')
+    
+    return list_of_datetimes
 
 def get_interpolated_timestamp(datetimes, break_point) -> pd.Timestamp:
     """
