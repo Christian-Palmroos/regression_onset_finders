@@ -121,6 +121,13 @@ def generate_fit_lines(data_df:pd.DataFrame, indices:np.ndarray, const:float, li
         selection_start = list_of_breakpoints[i-1] if i > 0 else 0
         selection_end = list_of_breakpoints[i] if i < len(list_of_breakpoints) else len(indices)
         index_selection = indices[(indices>=selection_start)&(indices<selection_end)]
+
+        # Overwrite the index selection with ordinal numbers from 0 to len(index_selection), because otherwise
+        # only the first linear polynome fits right; all the others will look as if they start from the common 
+        # origin (because they, in fact, do). Perhaps it would be possible to hold on to the actual index selection
+        # but that would require me to find a constant subtraction term to apply to these fits to bring them down
+        # so that their origin would lie at the point at which the previous fit ends.
+        #index_selection = np.linspace(start=0, stop=len(index_selection)-1, num=len(index_selection))
         list_of_index_selections.append(index_selection)
 
         # Choose the constant term for the 1st order polynomial:
@@ -133,6 +140,10 @@ def generate_fit_lines(data_df:pd.DataFrame, indices:np.ndarray, const:float, li
 
         # Generate the line and add it to the list of lines
         line = (list_of_index_selections[i] * alpha) + line_const
+
+        # Subtraction term is the first value of the line
+        if i > 0:
+            line = line - list_of_index_selections[i][0] * alpha
         list_of_lines.append(line)
 
     # Generate a list of datetime selection to index the lines

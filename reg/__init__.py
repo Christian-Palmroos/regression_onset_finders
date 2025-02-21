@@ -101,7 +101,14 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
                                                                                  list_of_breakpoint_errs=list_of_breakpoint_errs,
                                                                                  index_choice=index_choice)
 
+    # Compile a results dictionary to eventually return
     results_dict = {"const": const}
+    for i, alpha in enumerate(list_of_alphas):
+        results_dict[f"alpha{i}"] = alpha
+    for i, bp in enumerate(list_of_dt_breakpoints):
+        results_dict[f"breakpoint{i}"] = bp
+    for i, bp_errs in enumerate(list_of_dt_breakpoint_errs):
+        results_dict[f"breakpoint{i}_errors"] = bp_errs
 
     if plot:
 
@@ -148,10 +155,11 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
 
     # When diagnostics is enabled, return additional info about the run
     if diagnostics:
-        results_dict["series"] = series,
-        results_dict["indices"] = numerical_indices
+        #results_dict["series"] = series,
+        #results_dict["indices"] = numerical_indices
+        pass
 
-    results_dict["line"] = list_of_fit_series[1]
+    # results_dict["line"] = list_of_fit_series[1]
 
     return results_dict, data
 
@@ -202,13 +210,16 @@ def unpack_fit_results(fit_results:dict, num_of_breaks:int) -> tuple:
     const = fit_results["const"]["estimate"]
     alpha = fit_results["alpha1"]["estimate"]
 
+    # Initialize lists to collect values into
     list_of_alphas = [alpha]
     list_of_breakpoints = []
     list_of_breakpoint_errs = []
+
     # For a single break, there will be one iteration in the loop -> one additional slope. 
     for i in range(num_of_breaks):
 
-        alpha = fit_results[f"alpha{i+1}"]["estimate"]
+        # Access the i+2th index in fit_results, because that package's indexing somehow starts from 1, not 0.
+        alpha = fit_results[f"alpha{i+2}"]["estimate"]
         break_point = fit_results[f"breakpoint{i+1}"]["estimate"]
         break_point_errs = fit_results[f"breakpoint{i+1}"]["confidence_interval"]
 
