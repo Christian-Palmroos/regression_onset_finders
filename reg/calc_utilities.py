@@ -90,14 +90,14 @@ def ints2log10(intensity) -> pd.Series:
     return logints
 
 
-def generate_fit_lines(series:pd.Series, indices:np.ndarray, const:float, list_of_alphas:list[float], 
-                       list_of_breakpoints:list[float]) -> list[pd.Series]:
+def generate_fit_lines(data_df:pd.DataFrame, indices:np.ndarray, const:float, list_of_alphas:list[float], 
+                       list_of_breakpoints:list[float], index_choice:str) -> list[pd.Series]:
     """
     Generates a list of first order polynomials as pandas Series from given fit parameters.
 
     Parameters:
     ----------
-    series : {pd.Series} The intensity data series, indexed by time.
+    data_df : {pd.DataFrame} The intensity dataframe, indexed by time.
     indices : {array-like} The numerical indices of the data, the x-axis. They are either ordinal numbers or seconds.
     const : {float} The constant of the first linear fit.
     list_of_alphas : {list[float]} The slopes of the fits. Is always one longer than list_of_breakpoints.
@@ -135,21 +135,23 @@ def generate_fit_lines(series:pd.Series, indices:np.ndarray, const:float, list_o
         line = (list_of_index_selections[i] * alpha) + line_const
         list_of_lines.append(line)
 
-    # list_of_datetimes = generate_fits_datetimes(list_of_index_selections, series=series)
+    # Generate a list of datetime selection to index the lines
+    list_of_datetimes = _generate_fits_datetimes(list_of_indices=list_of_index_selections, data_df=data_df, index_choice=index_choice)
+
     # Generate the list of series from list of lines (list of numpy arrays that contain the values of the lines)
     # and from the list of indices (which contain the corresponding x-values to the lines)
-    list_of_series = [pd.Series(list_of_lines[i], index=list_of_index_selections[i]) for i in range(len(list_of_alphas))]
+    list_of_series = [pd.Series(list_of_lines[i], index=list_of_datetimes[i]) for i in range(len(list_of_alphas))]
 
     return list_of_series
 
 
-def generate_fits_datetimes(list_of_fits:list, series:pd.Series, index_choice:str):
+def _generate_fits_datetimes(list_of_indices:list, data_df:pd.DataFrame, index_choice:str):
     """
-    
+
     Parameters:
     -----------
-    list_of_fits : {list[pd.Series]} Fits generated from fit parameters.
-    series : {pd.Series} the data series, indexed by time.
+    list_of_indices : {list[pd.Series]} Fits generated from fit parameters.
+    data_df : {pd.DataFrame} The dataframe that contains the selected data, indexed by time.
     index_choice : {str} Either 'counting_numbers' or 'time_s'
 
     Returns:
@@ -159,16 +161,15 @@ def generate_fits_datetimes(list_of_fits:list, series:pd.Series, index_choice:st
 
     list_of_datetimes = []
     if index_choice=="counting_numbers":
-        for fit in list_of_fits:
-            start_index = 0
-            datetimes = series.index[start_index]
-        line1_datetimes = series.index[:len(line1)]
-        line2_datetimes = series.index[len(line1):]
+        for indices in list_of_indices:
+            datetimes_selection = data_df.loc[data_df[COUNTING_NUMBERS_COL_NAME].isin(indices)].index
+            list_of_datetimes.append(datetimes_selection)
     else:
-        line1_datetimes = pd.to_datetime(line1.index, unit='s')
-        line2_datetimes = pd.to_datetime(line2.index, unit='s')
-    
+        for indices in list_of_indices:
+            datetimes_selection = pd.to_datetime(indices, unit='s')
+
     return list_of_datetimes
+
 
 def get_interpolated_timestamp(datetimes, break_point) -> pd.Timestamp:
     """
@@ -178,7 +179,7 @@ def get_interpolated_timestamp(datetimes, break_point) -> pd.Timestamp:
     -----------
     datetimes : {DatetimeIndex or similar}
     break_point : {float}
-    
+
     Returns:
     ----------
     interpolated_timestamp : {pd.Timestamp}
