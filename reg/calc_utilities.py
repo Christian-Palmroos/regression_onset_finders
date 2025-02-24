@@ -130,6 +130,13 @@ def generate_fit_lines(data_df:pd.DataFrame, indices:np.ndarray, const:float, li
         #index_selection = np.linspace(start=0, stop=len(index_selection)-1, num=len(index_selection))
         list_of_index_selections.append(index_selection)
 
+        # Generate the line y = alpha * x, where alpha = const
+        line = list_of_index_selections[i] * alpha
+
+        # Subtraction term is the first value of the line to bring the start of the line to the y = 0 level.
+        if i > 0:
+            line = line - line[0]
+
         # Choose the constant term for the 1st order polynomial:
         if i == 0:
             line_const = const
@@ -137,13 +144,11 @@ def generate_fit_lines(data_df:pd.DataFrame, indices:np.ndarray, const:float, li
             # Depending on the orientation of the previous line, the next line starts from the max or the 
             # min of the previous line.
             line_const = np.nanmax(list_of_lines[i-1]) if list_of_alphas[i-1] > 0 else np.nanmin(list_of_lines[i-1])
+        
+        # At this point the line is a simple y = alpha * x, where y pierces the x-axis at the first value of
+        # the respective index selection. Now lift the line with line_const, and append to the list of lines
+        line = line + line_const
 
-        # Generate the line and add it to the list of lines
-        line = (list_of_index_selections[i] * alpha) + line_const
-
-        # Subtraction term is the first value of the line
-        if i > 0:
-            line = line - list_of_index_selections[i][0] * alpha
         list_of_lines.append(line)
 
     # Generate a list of datetime selection to index the lines

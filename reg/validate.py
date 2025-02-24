@@ -16,3 +16,7 @@ def _validate_index_choice(index_choice:str) -> None:
 def _validate_plot_style(plot_style:str) -> None:
     if plot_style not in VALID_PLOT_STYLES:
         raise ValueError(f"{plot_style} is not a valid plot_style!\nValid plot_style options are {VALID_PLOT_STYLES}")
+
+def _validate_fit_convergence(regression_converged:bool) -> None:
+    if not regression_converged:
+        raise ValueError(f"Regression converged : {regression_converged}. Try other settings.")

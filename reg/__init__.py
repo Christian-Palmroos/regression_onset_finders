@@ -18,10 +18,12 @@ import piecewise_regression
 from . import calc_utilities as calc
 from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_FIGSIZE, STANDARD_LEGENDSIZE
 
-from .validate import _validate_index_choice, _validate_plot_style
+from .validate import _validate_index_choice, _validate_plot_style, _validate_fit_convergence
 
 DEFAULT_NUM_OF_BREAKPOINTS = 1
 DEFAULT_SELECTION_ALPHA = 0.12
+
+BREAKPOINT_SHADING_ALPHA = 0.18
 
 def workflow(data, channel:str, resample:str=None, xlim:list=None,
             window:int=None, threshold:float=None, plot:bool=True, diagnostics=False,
@@ -87,10 +89,11 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
     # Get the fit results
     fit_results = break_regression(ints=series.values, indices=numerical_indices, num_of_breaks=breaks)
 
-    #return fit_results
     # The results are a dictionary, extract values here. Also check that the result converged.
-    regression_converged = fit_results["converged"]
     estimates = fit_results["estimates"]
+    regression_converged = fit_results["converged"]
+
+    _validate_fit_convergence(regression_converged=regression_converged)
 
     const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs = unpack_fit_results(fit_results=estimates,
                                                                                              num_of_breaks=breaks)
@@ -139,7 +142,7 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
 
         for i, breakpoint_dt in enumerate(list_of_dt_breakpoints):
 
-            ax.axvspan(xmin=list_of_dt_breakpoint_errs[i][0], xmax=list_of_dt_breakpoint_errs[i][1], alpha=0.20, color="red")
+            ax.axvspan(xmin=list_of_dt_breakpoint_errs[i][0], xmax=list_of_dt_breakpoint_errs[i][1], alpha=BREAKPOINT_SHADING_ALPHA, color="red")
             ax.axvline(x=breakpoint_dt, c="red", lw=1.8, label=f"breakpoint{i}: {breakpoint_dt.strftime('%H:%M:%S')}")
 
         ax.legend(fontsize=STANDARD_LEGENDSIZE)
