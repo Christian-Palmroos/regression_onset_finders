@@ -41,7 +41,12 @@ def select_channel_nonzero_ints(df:pd.DataFrame, channel:str, dropnan:bool=True)
 def produce_index_numbers(df:pd.DataFrame):
     # Work on a copy to not alter the original one
     df = df.copy(deep=True)
-    index_numbers = df.index.strftime("%s")
+    #index_numbers = df.index.strftime("%s")
+    # pd.Timedelta(seconds=(timestamp_dt.timestamp() - float(timestamp_dt.strftime("%s")))) == Timedelta(0 days, 02:00:00)
+    # It seems strftime("%s") shows time 2 hours behind real POSIX time, for reason related to timezone differences between
+    # my local timezone (UTC+2 at the moment) and that of UTC time.
+    # Instead, utilize DatetimeIndex.astype(int) to get total nanoseconds after the EPOCH in UTC.
+    index_numbers = df.index.astype(np.int64) // 1e9
     df[INDEX_NUMBER_COL_NAME] = index_numbers.astype(int)
     return df
 
@@ -117,17 +122,17 @@ def generate_fit_lines(data_df:pd.DataFrame, indices:np.ndarray, const:float, li
 
         # Define the selection (start&end) and apply it to all indices. Save the selected slice to a list.
         # For the start of the selection, first take 0, and then always index i-1 from breakpoints.
-        # For the end of the selection, always take ith breakpoint, except for the final (take len(indices)==final index)
+        # For the end of the selection, always take ith breakpoint, except for the final take len(indices)==final index
         selection_start = list_of_breakpoints[i-1] if i > 0 else 0
-        selection_end = list_of_breakpoints[i] if i < len(list_of_breakpoints) else len(indices)
-        index_selection = indices[(indices>=selection_start)&(indices<selection_end)]
+        selection_end = list_of_breakpoints[i] if i < len(list_of_breakpoints) else len(indices) if index_choice==COUNTING_NUMBERS_COL_NAME else indices[-1]
+
+        index_selection = indices[(indices>=selection_start)&(indices<=selection_end)]
 
         # Overwrite the index selection with ordinal numbers from 0 to len(index_selection), because otherwise
         # only the first linear polynome fits right; all the others will look as if they start from the common 
         # origin (because they, in fact, do). Perhaps it would be possible to hold on to the actual index selection
         # but that would require me to find a constant subtraction term to apply to these fits to bring them down
         # so that their origin would lie at the point at which the previous fit ends.
-        #index_selection = np.linspace(start=0, stop=len(index_selection)-1, num=len(index_selection))
         list_of_index_selections.append(index_selection)
 
         # Generate the line y = alpha * x, where alpha = const
@@ -183,6 +188,7 @@ def _generate_fits_datetimes(list_of_indices:list, data_df:pd.DataFrame, index_c
     else:
         for indices in list_of_indices:
             datetimes_selection = pd.to_datetime(indices, unit='s')
+            list_of_datetimes.append(datetimes_selection)
 
     return list_of_datetimes
 

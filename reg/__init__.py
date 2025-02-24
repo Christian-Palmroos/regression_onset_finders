@@ -119,6 +119,7 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
         fig, ax = plt.subplots(figsize=STANDARD_FIGSIZE)
 
         if diagnostics:
+            print(f"Data selection: {series.index[0]}, {series.index[-1]}")
             print(f"Regression converged: {regression_converged}")
             # Generate the fit lines to display on the plot
             list_of_fit_series = calc.generate_fit_lines(data_df=data, indices=numerical_indices, const=const,
@@ -136,7 +137,7 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
 
         # Plot the intensities
         if plot_style=="step":
-            ax.step(plot_series.index, plot_series.values, label=channel, zorder=1)
+            ax.step(plot_series.index, plot_series.values, label=channel, zorder=1, where="mid")
         if plot_style=="scatter":
             ax.scatter(plot_series.index, plot_series.values, label=channel, zorder=1)
 
@@ -158,13 +159,13 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
 
     # When diagnostics is enabled, return additional info about the run
     if diagnostics:
-        #results_dict["series"] = series,
-        #results_dict["indices"] = numerical_indices
-        pass
+        results_dict["series"] = series
+        results_dict["indices"] = numerical_indices
+        results_dict["data_df"] = data
+        for i, line in enumerate(list_of_fit_series):
+            results_dict[f"line{i}"] = line
 
-    # results_dict["line"] = list_of_fit_series[1]
-
-    return results_dict, data
+    return results_dict
 
 
 def break_regression(ints, indices, starting_values:list=None, num_of_breaks:int=None) -> dict:
