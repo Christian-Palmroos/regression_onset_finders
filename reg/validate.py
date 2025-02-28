@@ -19,4 +19,4 @@ def _validate_plot_style(plot_style:str) -> None:
 
 def _validate_fit_convergence(regression_converged:bool) -> None:
     if not regression_converged:
-        raise ValueError(f"Regression converged : {regression_converged}. Try other settings.")
+        raise ValueError(f"Regression converged: {regression_converged}. Try other settings.")

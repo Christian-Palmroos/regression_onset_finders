@@ -285,6 +285,10 @@ def quicklook(data:pd.DataFrame, channel:str=None, resample:str=None, xlim:list=
     """
     Makes a quicklook plot of one or more channels for a given dataframe.
 
+    Comprehensive example of ipympl: https://matplotlib.org/ipympl/examples/full-example.html
+
+    Parameters:
+    --------------
     data : dataframe
     channel : str, list
     resample : str
@@ -302,7 +306,7 @@ def quicklook(data:pd.DataFrame, channel:str=None, resample:str=None, xlim:list=
         channel = [channel]
 
     fig, ax = plt.subplots(figsize=STANDARD_FIGSIZE)
-    
+
     ax.set_yscale("log")
 
     for ch in channel:
