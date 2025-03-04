@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Constants:
+STANDARD_QUICKLOOK_FIGSIZE = (13,7)
 STANDARD_FIGSIZE = (26,11)
 
 STANDARD_LEGENDSIZE = 26

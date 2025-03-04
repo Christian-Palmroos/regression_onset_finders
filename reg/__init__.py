@@ -10,13 +10,16 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import ipympl
+
 from matplotlib.dates import DateFormatter
 
 import piecewise_regression
 
 # Relative imports cannot be used with "import .a" form; use "from . import a" instead. -Pylance
 from . import calc_utilities as calc
-from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_FIGSIZE, STANDARD_LEGENDSIZE
+from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_QUICKLOOK_FIGSIZE, \
+                                STANDARD_FIGSIZE, STANDARD_LEGENDSIZE
 
 from .validate import _validate_index_choice, _validate_plot_style, _validate_fit_convergence
 
@@ -24,6 +27,86 @@ DEFAULT_NUM_OF_BREAKPOINTS = 1
 DEFAULT_SELECTION_ALPHA = 0.12
 
 BREAKPOINT_SHADING_ALPHA = 0.18
+
+
+class Reg:
+
+    def __init__(self, data:pd.DataFrame):
+        self.data = data
+        self.selection_max_x = pd.NaT
+        self.selection_max_y = np.nan
+
+
+    def set_selection_max(self, x, y):
+        """
+        Sets the parameters by which data selection will be applied when running
+        regression analysis.
+        """
+        self.selection_max_x = x
+        self.selection_max_y = y
+
+
+    def onclick(self, event):
+        """
+        Store coordinates to class attributes when clicking the interactive plot.
+        Also draws a vertical line marking the end of the selection criterion.
+        """
+        if event.xdata is not None and event.ydata is not None:
+            self.set_selection_max(x=event.xdata, y=event.ydata)
+
+        self.ax.axvline(x=self.clicked_coords[-1][0])
+
+
+    def draw_selection_line_marker(self, x):
+        self.quicklook_ax.axvline(x=x)
+
+
+    def quicklook(self, channel:str=None, resample:str=None, xlim:list=None) -> None:
+        """
+        Makes a quicklook plot of one or more channels for a given dataframe.
+        Meant to be used in interactive mode, so that the user can apply data selection
+        by clicking.
+
+        Comprehensive example of ipympl: https://matplotlib.org/ipympl/examples/full-example.html
+
+        Parameters:
+        --------------
+        channel : str, list
+        resample : str
+        xlim : list
+        """
+
+        # Apply resampling if asked to
+        if isinstance(resample,str):
+            data = calc.resample_df(df=self.data, avg=resample)
+        else:
+            data = self.data.copy(deep=True)
+
+        # Make sure that channel is a list to iterate over
+        if channel is None:
+            channel = list(data.columns)
+        if isinstance(channel,(str,int)):
+            channel = [channel]
+
+        # Attach the fig and axes to class attributes
+        self.quicklook_fig, self.quicklook_ax = plt.subplots(figsize=STANDARD_QUICKLOOK_FIGSIZE)
+
+        # Attach the onclick() -method to a mouse button press event for the interactive plot
+        self.quicklook_fig.canvas.mpl_connect('button_press_event', self.onclick)
+
+        # Set the axis settings
+        self.quicklook_ax.set_yscale("log")
+        set_xlims(ax=self.quicklook_ax, data=data, xlim=xlim)
+        set_standard_ticks(ax=self.quicklook_ax, labelsize=None)
+
+        # Plot the curves
+        for ch in channel:
+            self.quicklook_ax.step(data.index.values, data[ch].values, where="mid", label=ch)
+
+        # Add the legend and show the figure
+        self.quicklook_ax.legend(fontsize=STANDARD_LEGENDSIZE)
+        plt.show()
+
 
 def workflow(data, channel:str, resample:str=None, xlim:list=None,
             window:int=None, threshold:float=None, plot:bool=True, diagnostics=False,
@@ -281,42 +364,6 @@ def breakpoints_to_datetime(series:pd.Series, numerical_indices:np.ndarray, list
     return list_of_dt_breakpoints, list_of_dt_breakpoint_errs
 
 
-def quicklook(data:pd.DataFrame, channel:str=None, resample:str=None, xlim:list=None) -> None:
-    """
-    Makes a quicklook plot of one or more channels for a given dataframe.
 
-    Comprehensive example of ipympl: https://matplotlib.org/ipympl/examples/full-example.html
-
-    Parameters:
-    --------------
-    data : dataframe
-    channel : str, list
-    resample : str
-    xlim : list
-    """
-
-    #color = plt.cmap("plasma")
-    if resample is not None:
-        data = calc.resample_df(df=data, avg=resample)
-
-    # Make sure that channel is a list to iterate over
-    if channel is None:
-        channel = list(data.columns)
-    if isinstance(channel,(str,int)):
-        channel = [channel]
-
-    fig, ax = plt.subplots(figsize=STANDARD_FIGSIZE)
-
-    ax.set_yscale("log")
-
-    for ch in channel:
-        ax.step(data.index.values, data[ch].values, where="mid", label=ch)
-
-    ax.legend(fontsize=STANDARD_LEGENDSIZE)
-
-    set_xlims(ax=ax, data=data, xlim=xlim)
-    set_standard_ticks(ax=ax, labelsize=None)
-
-    plt.show()
 
 
