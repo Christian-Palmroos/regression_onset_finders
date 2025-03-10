@@ -19,14 +19,13 @@ import piecewise_regression
 # Relative imports cannot be used with "import .a" form; use "from . import a" instead. -Pylance
 from . import calc_utilities as calc
 from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_QUICKLOOK_FIGSIZE, \
-                                STANDARD_FIGSIZE, STANDARD_LEGENDSIZE
+                                STANDARD_FIGSIZE, STANDARD_LEGENDSIZE, DEFAULT_SELECTION_ALPHA, \
+                                BREAKPOINT_SHADING_ALPHA
 
-from .validate import _validate_index_choice, _validate_plot_style, _validate_fit_convergence
+from .validate import _validate_index_choice, _validate_plot_style, _validate_fit_convergence, _validate_selection
+
 
 DEFAULT_NUM_OF_BREAKPOINTS = 1
-DEFAULT_SELECTION_ALPHA = 0.12
-
-BREAKPOINT_SHADING_ALPHA = 0.18
 
 
 class Reg:
@@ -46,7 +45,7 @@ class Reg:
         self.selection_max_y = y
 
 
-    def onclick(self, event):
+    def _onclick(self, event):
         """
         Store coordinates to class attributes when clicking the interactive plot.
         Also draws a vertical line marking the end of the selection criterion.
@@ -61,7 +60,7 @@ class Reg:
         self.quicklook_ax.axvline(x=x)
 
 
-    def quicklook(self, channel:str=None, resample:str=None, xlim:list=None) -> None:
+    def quicklook(self, channel:str=None, resample:str=None, xlim:list=None, selection:str=None) -> None:
         """
         Makes a quicklook plot of one or more channels for a given dataframe.
         Meant to be used in interactive mode, so that the user can apply data selection
@@ -74,6 +73,7 @@ class Reg:
         channel : str, list
         resample : str
         xlim : list
+        selection : {str} format: %Y-%m-%d %H:%M%S
         """
 
         # Apply resampling if asked to
@@ -91,8 +91,18 @@ class Reg:
         # Attach the fig and axes to class attributes
         self.quicklook_fig, self.quicklook_ax = plt.subplots(figsize=STANDARD_QUICKLOOK_FIGSIZE)
 
-        # Attach the onclick() -method to a mouse button press event for the interactive plot
-        self.quicklook_fig.canvas.mpl_connect('button_press_event', self.onclick)
+        # Attach the onclick() -method to a mouse button press event for the interactive plot if
+        # a selection parameter was not provided
+        if selection is None:
+            self.quicklook_fig.canvas.mpl_connect('button_press_event', self._onclick)
+        else:
+            _validate_selection(selection=selection)
+            selection_dt = pd.to_datetime(selection)
+            closest_dt_index = data.index.get_indexer(target=[selection_dt], method="nearest")[0]
+            idx_of_channel = data.columns.get_indexer(target=[channel[0]])[0]
+            self.set_selection_max(x=selection_dt,
+                                   y=data.iat[closest_dt_index, idx_of_channel])
+            self.draw_selection_line_marker(x=selection_dt)
 
         # Set the axis settings
         self.quicklook_ax.set_yscale("log")
@@ -102,6 +112,11 @@ class Reg:
         # Plot the curves
         for ch in channel:
             self.quicklook_ax.step(data.index.values, data[ch].values, where="mid", label=ch)
+
+        # Formatting the x-axis and setting the axis labels
+        self.quicklook_ax.xaxis.set_major_formatter(DateFormatter("%H:%M\n%d"))
+        self.quicklook_ax.set_xlabel(f"Date of {data.index[len(data.index)//2].strftime('%b, %Y')}", fontsize=STANDARD_LEGENDSIZE)
+        self.quicklook_ax.set_ylabel(r"Intensity [1/(cm$^{2}$ sr s MeV)]", fontsize=STANDARD_LEGENDSIZE)
 
         # Add the legend and show the figure
         self.quicklook_ax.legend(fontsize=STANDARD_LEGENDSIZE)
@@ -236,7 +251,7 @@ def workflow(data, channel:str, resample:str=None, xlim:list=None,
 
         # Format the x-axis
         ax.xaxis.set_major_formatter(DateFormatter("%H:%M\n%d"))
-        ax.set_xlabel(f"date of {breakpoint_dt.strftime('%b %Y')}", fontsize=STANDARD_LEGENDSIZE)
+        ax.set_xlabel(f"Date of {breakpoint_dt.strftime('%b, %Y')}", fontsize=STANDARD_LEGENDSIZE)
 
         plt.show()
 
