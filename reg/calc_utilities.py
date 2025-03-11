@@ -285,3 +285,44 @@ def search_first_peak(ints, window=None, threshold=None) -> tuple[float, int]:
         raise ValueError("The parameter 'threshold' was set higher than any value in the intensity time series. Either set the threshold lower, or don't give it as an input.")
     return max_val, max_idx
 
+
+def infer_cadence(series:pd.Series) -> str:
+    """
+    Returns the time resolution of the input series.
+
+    Parameters:
+    -----------
+    series: {pd.Series}
+
+    Returns:
+    ----------
+    resolution: {str}
+            Pandas-compatible freqstr
+    """
+
+    # If series has no set frequency, infer it from the 
+    # differential between consecutive timestamps:
+    if series.index.freq is None:
+        
+        # The time differentials
+        index_diffs = series.index.diff()
+        
+        # There might be unregular time differences, pick the most
+        # appearing one (mode).
+        diffs, counts = np.unique(index_diffs, return_counts=True)
+        mode_dt = pd.Timedelta(diffs[np.argmax(counts)])
+
+        # Round up to the nearest second, because otherwise e.g., STEREO / SEPT data
+        # that may have cadence of '59.961614005' seconds is interpreted to have nanosecond
+        # precision.
+        mode_dt = mode_dt.round(freq='s')
+
+        # If less than 1 minute, express in seconds
+        divisor = 60 if mode_dt.resolution_string == "min" else 1
+        
+        return f"{mode_dt.seconds//divisor} {mode_dt.resolution_string}"
+
+    
+    else:
+        freq_str = series.index.freq.freqstr
+        return freq_str if freq_str!="min" else f"1 {freq_str}"

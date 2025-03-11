@@ -18,7 +18,7 @@ import piecewise_regression
 
 # Relative imports cannot be used with "import .a" form; use "from . import a" instead. -Pylance
 from . import calc_utilities as calc
-from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_QUICKLOOK_FIGSIZE, \
+from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_QUICKLOOK_FIGSIZE, STANDARD_TITLE_FONTSIZE, \
                                 STANDARD_FIGSIZE, STANDARD_LEGENDSIZE, DEFAULT_SELECTION_ALPHA, \
                                 BREAKPOINT_SHADING_ALPHA
 
@@ -26,6 +26,7 @@ from .validate import _validate_index_choice, _validate_plot_style, _validate_fi
 
 
 DEFAULT_NUM_OF_BREAKPOINTS = 1
+SECONDS_PER_DAY = 86400
 
 
 class Reg:
@@ -51,7 +52,9 @@ class Reg:
         Also draws a vertical line marking the end of the selection criterion.
         """
         if event.xdata is not None and event.ydata is not None:
-            self.set_selection_max(x=event.xdata, y=event.ydata)
+            # First convert matplotlib's xdata (days after epoch) to seconds and then to datetime
+            x = pd.to_datetime(event.xdata*SECONDS_PER_DAY, unit='s')
+            self.set_selection_max(x=x, y=event.ydata)
 
         self.ax.axvline(x=self.clicked_coords[-1][0])
 
@@ -123,147 +126,182 @@ class Reg:
         plt.show()
 
 
-def workflow(data, channel:str, resample:str=None, xlim:list=None,
-            window:int=None, threshold:float=None, plot:bool=True, diagnostics=False,
-            index_choice="time_s", plot_style="step", breaks=1):
-    """
-    Seeks for the first peak in the given data. Cuts the data and only considers that part which comes
-    before the first peak. In this chosen part, seek (a) break/s in the linear trend that is the background
-    of the event. The break corresponds to the start of the event, and the second linear fit corresponds
-    to the slope of the rising phase of the event (the linear slope of the 10-based logarithm).
+    def find_breakpoints(self, channel:str, resample:str=None, xlim:list=None, window:int=None, 
+                        threshold:float=None, plot:bool=True, diagnostics=False, index_choice="time_s", 
+                        plot_style="step", breaks=1, title:str=None):
+        """
+        Seeks for the first peak in the given data. Cuts the data and only considers that part which comes
+        before the first peak. In this chosen part, seek (a) break/s in the linear trend that is the background
+        of the event. The break corresponds to the start of the event, and the second linear fit corresponds
+        to the slope of the rising phase of the event (the linear slope of the 10-based logarithm).
 
-    Parameters:
-    -----------
-    data : {pd.DataFrame}
-    channel : {str}
-    resample : {str}
-    xlim : {list}
-    window : {str}
-    threshold : {float}
-    plot : {bool}
-    diagnostics : {bool}
-    index_choice : {str}
-    plot_style : {str} Either 'step' or 'scatter'
-    breaks : {int} Number of breaks
+        Parameters:
+        -----------
+        data : {pd.DataFrame}
+        channel : {str}
+        resample : {str}
+        xlim : {list}
+        window : {str}
+        threshold : {float}
+        plot : {bool}
+        diagnostics : {bool}
+        index_choice : {str}
+        plot_style : {str} Either 'step' or 'scatter'
+        breaks : {int} Number of breaks to search for.
+        title : {str} The title string.
 
-    Returns:
-    ----------
-    results_dict : {dict} A dictionary of results that contains 'const', 'slope1', 'slope2', 
-                          'break_point' and 'break_errors'.
-    """
+        Returns:
+        ----------
+        results_dict : {dict} A dictionary of results that contains 'const', 'slope1', 'slope2', 
+                            'break_point' and 'break_errors'.
+        """
 
-    # Run checks
-    _validate_index_choice(index_choice=index_choice)
-    _validate_plot_style(plot_style=plot_style)
+        # Clears the past figure (interactive)
+        plt.close()
 
-    # Choose resampling:
-    if isinstance(resample, str):
-        data = calc.resample_df(df=data, avg=resample)
-    # If no resampling, just take a copy of the original data to avert 
-    # modifying it by accident
-    else:
-        data = data.copy(deep=True)
+        # Run checks
+        _validate_index_choice(index_choice=index_choice)
+        _validate_plot_style(plot_style=plot_style)
 
-    # Select the channel and produce indices for them. The indices are stored in the 
-    # column "time_s", for they read seconds since the Epoch (1970-01-01 00:00).
-    # The index numbers can be used for the regression algorithm instead of datetime values. 
-    data = calc.produce_index_numbers(df=data)
-    data = calc.select_channel_nonzero_ints(df=data, channel=channel)
+        # Choose resampling:
+        if isinstance(resample, str):
+            data = calc.resample_df(df=self.data, avg=resample)
+        # If no resampling, just take a copy of the original data to avert 
+        # modifying it by accident
+        else:
+            data = self.data.copy(deep=True)
+            resample = calc.infer_cadence(series=data[channel])
 
-    # Convert to log
-    series = calc.ints2log10(intensity=data[channel])
-    # This is what's getting plotted
-    plot_series = series.copy(deep=True)
+        # Select the channel and produce indices for them. The indices are stored in the 
+        # column "time_s", for they read seconds since the Unix epoch (1970-01-01 00:00:00).
+        # The index numbers can be used for the regression algorithm instead of datetime values. 
+        data = calc.produce_index_numbers(df=data)
+        data = calc.select_channel_nonzero_ints(df=data, channel=channel)
 
-    # Get the numerical index of the first peak to choose the selection from 
-    # background to first peak. Also generate numerical index to run from 0 to max_idx
-    max_val, max_idx = calc.search_first_peak(ints=series, window=window, threshold=threshold)
+        # Convert to log
+        series = calc.ints2log10(intensity=data[channel])
+        # This is what's getting plotted
+        plot_series = series.copy(deep=True)
 
-    # Apply a slice/selection to the data series and the numerical indices (seconds since Epoch)
-    # according to the first peak found
-    series = series[:max_idx]
-    numerical_indices = data[index_choice].values[:max_idx]
+        if pd.isnull(self.selection_max_x):
+            # Get the numerical index of the first peak to choose the selection from 
+            # background to first peak. Also generate numerical index to run from 0 to max_idx
+            max_val, max_idx = calc.search_first_peak(ints=series, window=window, threshold=threshold)
+        else:
+            max_idx = data.index.get_indexer(target=[self.selection_max_x], method="nearest")[0]
+            max_val = self.selection_max_y
 
-    # Get the fit results
-    fit_results = break_regression(ints=series.values, indices=numerical_indices, num_of_breaks=breaks)
+        # Apply a slice/selection to the data series and the numerical indices (seconds since Epoch)
+        # according to the first peak found
+        series = series[:max_idx]
+        numerical_indices = data[index_choice].values[:max_idx]
 
-    # The results are a dictionary, extract values here. Also check that the result converged.
-    estimates = fit_results["estimates"]
-    regression_converged = fit_results["converged"]
+        # Get the fit results
+        fit_results = break_regression(ints=series.values, indices=numerical_indices, num_of_breaks=breaks)
 
-    _validate_fit_convergence(regression_converged=regression_converged)
+        # The results are a dictionary, extract values here. Also check that the result converged.
+        estimates = fit_results["estimates"]
+        regression_converged = fit_results["converged"]
 
-    const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs = unpack_fit_results(fit_results=estimates,
-                                                                                             num_of_breaks=breaks)
+        _validate_fit_convergence(regression_converged=regression_converged)
 
-    # Finds corresponding timestamps to the numerical indices
-    list_of_dt_breakpoints, list_of_dt_breakpoint_errs = breakpoints_to_datetime(series=series, numerical_indices=numerical_indices,
-                                                                                 list_of_breakpoints=list_of_breakpoints,
-                                                                                 list_of_breakpoint_errs=list_of_breakpoint_errs,
-                                                                                 index_choice=index_choice)
+        const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs = unpack_fit_results(fit_results=estimates,
+                                                                                                num_of_breaks=breaks)
 
-    # Compile a results dictionary to eventually return
-    results_dict = {"const": const}
-    for i, alpha in enumerate(list_of_alphas):
-        results_dict[f"alpha{i}"] = alpha
-    for i, bp in enumerate(list_of_dt_breakpoints):
-        results_dict[f"breakpoint{i}"] = bp
-    for i, bp_errs in enumerate(list_of_dt_breakpoint_errs):
-        results_dict[f"breakpoint{i}_errors"] = bp_errs
+        # Finds corresponding timestamps to the numerical indices
+        list_of_dt_breakpoints, list_of_dt_breakpoint_errs = breakpoints_to_datetime(series=series, numerical_indices=numerical_indices,
+                                                                                    list_of_breakpoints=list_of_breakpoints,
+                                                                                    list_of_breakpoint_errs=list_of_breakpoint_errs,
+                                                                                    index_choice=index_choice)
 
-    if plot:
+        # Compile a results dictionary to eventually return
+        results_dict = {"const": const}
+        for i, alpha in enumerate(list_of_alphas):
+            results_dict[f"alpha{i}"] = alpha
+        for i, bp in enumerate(list_of_dt_breakpoints):
+            results_dict[f"breakpoint{i}"] = bp
+        for i, bp_errs in enumerate(list_of_dt_breakpoint_errs):
+            results_dict[f"breakpoint{i}_errors"] = bp_errs
 
-        # Init figure
-        fig, ax = plt.subplots(figsize=STANDARD_FIGSIZE)
+        if plot:
 
+            # Init figure
+            fig, ax = plt.subplots(figsize=STANDARD_FIGSIZE)
+
+            if diagnostics:
+                print(f"Data selection: {series.index[0]}, {series.index[-1]}")
+                print(f"Regression converged: {regression_converged}")
+                # Generate the fit lines to display on the plot
+                list_of_fit_series = calc.generate_fit_lines(data_df=data, indices=numerical_indices, const=const,
+                                                            list_of_alphas=list_of_alphas, 
+                                                            list_of_breakpoints=list_of_breakpoints, index_choice=index_choice)
+
+                # Plot the fit results on the real data
+                for line in list_of_fit_series:
+                    ax.plot(line.index, line.values, lw=2.8, ls="--", c="maroon", zorder=3)
+
+                # Apply a span over xmin=start and xmax=max_idx to display the are considered for the fit
+                ax.axvspan(xmin=series.index[0], xmax=series.index[-1], facecolor="green", alpha=DEFAULT_SELECTION_ALPHA, label="selection area")
+
+            # Plot the intensities
+            if plot_style=="step":
+                ax.step(plot_series.index, plot_series.values, label=channel, zorder=1, where="mid")
+            if plot_style=="scatter":
+                ax.scatter(plot_series.index, plot_series.values, label=channel, zorder=1)
+
+            for i, breakpoint_dt in enumerate(list_of_dt_breakpoints):
+
+                # One has to use the notoriously awkward triple curly parenthesis here to be able to
+                # employ LateX formalism in an f-string:
+                err_delta_plusminus = str(breakpoint_dt - list_of_dt_breakpoint_errs[i][0])[7:7+8]
+                #err_delta_minus = str(list_of_dt_breakpoint_errs[i][1] - breakpoint_dt)[7:7+8]
+                #bp_label = f"breakpoint$_{{{i}}}$: "+f"{breakpoint_dt.strftime('%H:%M:%S')}$_{{-{err_delta_minus}}}^{{+{err_delta_plus}}}$"
+                bp_label = f"breakpoint$_{{{i}}}$: "+f"{breakpoint_dt.strftime('%H:%M:%S')}$\pm${err_delta_plusminus}"
+                ax.axvspan(xmin=list_of_dt_breakpoint_errs[i][0], xmax=list_of_dt_breakpoint_errs[i][1], alpha=BREAKPOINT_SHADING_ALPHA, color="red")
+                ax.axvline(x=breakpoint_dt, c="red", lw=1.8, label=bp_label)
+
+            # Sets the yticklabels to their exponential form (e.g., 10^5 instead of 5)
+            fabricate_yticks(ax=ax)
+            set_standard_ticks(ax=ax)
+
+            # Format the x-axis, name the y-axis and set the x-axis span
+            ax.xaxis.set_major_formatter(DateFormatter("%H:%M\n%d"))
+            ax.set_xlabel(f"Date of {breakpoint_dt.strftime('%b, %Y')}", fontsize=STANDARD_LEGENDSIZE)
+            ax.set_ylabel(r"Intensity [1/(cm$^{2}$ sr s MeV)]", fontsize=STANDARD_LEGENDSIZE)
+            set_xlims(ax=ax, data=data, xlim=xlim)
+
+            ax.set_title(title, fontsize=STANDARD_TITLE_FONTSIZE)
+            ax.legend(fontsize=STANDARD_LEGENDSIZE)
+            plt.show()
+
+            results_dict["fig"] = fig
+            results_dict["ax"] = ax
+
+        # When diagnostics is enabled, return additional info about the run
         if diagnostics:
-            print(f"Data selection: {series.index[0]}, {series.index[-1]}")
-            print(f"Regression converged: {regression_converged}")
-            # Generate the fit lines to display on the plot
-            list_of_fit_series = calc.generate_fit_lines(data_df=data, indices=numerical_indices, const=const,
-                                                        list_of_alphas=list_of_alphas, 
-                                                        list_of_breakpoints=list_of_breakpoints, index_choice=index_choice)
+            results_dict["series"] = series
+            results_dict["indices"] = numerical_indices
+            results_dict["data_df"] = data
+            for i, line in enumerate(list_of_fit_series):
+                results_dict[f"line{i}"] = line
 
-            # Plot the fit results on the real data
-            for line in list_of_fit_series:
-                ax.plot(line.index, line.values, lw=2.8, ls="--", c="maroon", zorder=3)
+        return results_dict
 
-            # Apply a span over xmin=start and xmax=max_idx to display the are considered for the fit
-            ax.axvspan(xmin=series.index[0], xmax=series.index[-1], facecolor="green", alpha=DEFAULT_SELECTION_ALPHA)
 
-        ax.set_ylabel("Log(intensity)", fontsize=STANDARD_LEGENDSIZE)
+def fabricate_yticks(ax:plt.Axes) -> None:
+    """
+    Changes the y-axis labels to their 10-base exponebntial counterparts for the integer values.
+    Example: [1, 1.5, 2, 2.5, 3] -> [10^1, 10^2, 10^3]
 
-        # Plot the intensities
-        if plot_style=="step":
-            ax.step(plot_series.index, plot_series.values, label=channel, zorder=1, where="mid")
-        if plot_style=="scatter":
-            ax.scatter(plot_series.index, plot_series.values, label=channel, zorder=1)
+    ax : {plt.Axes} The axis object of the figure.
+    """
 
-        for i, breakpoint_dt in enumerate(list_of_dt_breakpoints):
+    integer_tick_values = [int(val) for val in ax.get_yticks() if val%1==0]
+    ax.set_yticks(integer_tick_values)
 
-            ax.axvspan(xmin=list_of_dt_breakpoint_errs[i][0], xmax=list_of_dt_breakpoint_errs[i][1], alpha=BREAKPOINT_SHADING_ALPHA, color="red")
-            ax.axvline(x=breakpoint_dt, c="red", lw=1.8, label=f"breakpoint{i}: {breakpoint_dt.strftime('%H:%M:%S')}")
-
-        ax.legend(fontsize=STANDARD_LEGENDSIZE)
-
-        set_xlims(ax=ax, data=data, xlim=xlim)
-        set_standard_ticks(ax=ax)
-
-        # Format the x-axis
-        ax.xaxis.set_major_formatter(DateFormatter("%H:%M\n%d"))
-        ax.set_xlabel(f"Date of {breakpoint_dt.strftime('%b, %Y')}", fontsize=STANDARD_LEGENDSIZE)
-
-        plt.show()
-
-    # When diagnostics is enabled, return additional info about the run
-    if diagnostics:
-        results_dict["series"] = series
-        results_dict["indices"] = numerical_indices
-        results_dict["data_df"] = data
-        for i, line in enumerate(list_of_fit_series):
-            results_dict[f"line{i}"] = line
-
-    return results_dict
+    # Triple curvy brackets for LateX inside f-string.
+    tick_labels = [f"10$^{{{val}}}$" for val in integer_tick_values]
+    ax.set_yticklabels(tick_labels)
 
 
 def break_regression(ints, indices, starting_values:list=None, num_of_breaks:int=None) -> dict:
