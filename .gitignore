@@ -1,0 +1,5 @@
+# Checkpoints of notebooks
+*.ipynb_checkpoints
+
+# Figures and pictures need not be updated
+*.png
