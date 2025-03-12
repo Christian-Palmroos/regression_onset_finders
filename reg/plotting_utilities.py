@@ -28,6 +28,7 @@ STANDARD_MINOR_TICKWIDTH = 2.1
 DEFAULT_SELECTION_ALPHA = 0.12
 BREAKPOINT_SHADING_ALPHA = 0.18
 
+LATEX_PM = r"$\pm$"
 
 def set_standard_ticks(ax, labelsize:int=None) -> None:
     """

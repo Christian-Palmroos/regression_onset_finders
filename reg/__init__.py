@@ -20,7 +20,7 @@ import piecewise_regression
 from . import calc_utilities as calc
 from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_QUICKLOOK_FIGSIZE, STANDARD_TITLE_FONTSIZE, \
                                 STANDARD_FIGSIZE, STANDARD_LEGENDSIZE, DEFAULT_SELECTION_ALPHA, \
-                                BREAKPOINT_SHADING_ALPHA
+                                BREAKPOINT_SHADING_ALPHA, LATEX_PM
 
 from .validate import _validate_index_choice, _validate_plot_style, _validate_fit_convergence, _validate_selection
 
@@ -36,17 +36,29 @@ class Reg:
         self.selection_max_x = pd.NaT
         self.selection_max_y = np.nan
 
+        self.selection_min_x = pd.NaT
+        self.selection_min_y = np.nan
 
-    def set_selection_max(self, x, y):
+
+    def _set_selection_max(self, x, y) -> None:
         """
-        Sets the parameters by which data selection will be applied when running
+        Sets the parameters by which data selection maximum will be applied when running
         regression analysis.
         """
         self.selection_max_x = x
         self.selection_max_y = y
 
 
-    def _onclick(self, event):
+    def _set_selection_min(self, x, y) -> None:
+        """
+        Sets the parameters by which data selection minimum will be applied when running
+        regression analysis.
+        """
+        self.selection_min_x = x
+        self.selection_min_y = y
+
+
+    def _onclick(self, event) -> None:
         """
         Store coordinates to class attributes when clicking the interactive plot.
         Also draws a vertical line marking the end of the selection criterion.
@@ -56,14 +68,14 @@ class Reg:
             x = pd.to_datetime(event.xdata*SECONDS_PER_DAY, unit='s')
             self.set_selection_max(x=x, y=event.ydata)
 
-        self.ax.axvline(x=self.clicked_coords[-1][0])
+        self._draw_selection_line_marker(x=self.clicked_coords[-1][0])
 
 
-    def draw_selection_line_marker(self, x):
-        self.quicklook_ax.axvline(x=x)
+    def _draw_selection_line_marker(self, x) -> None:
+        self.quicklook_ax.axvline(x=x, color="green", zorder=10)
 
 
-    def quicklook(self, channel:str=None, resample:str=None, xlim:list=None, selection:str=None) -> None:
+    def quicklook(self, channel:str=None, resample:str=None, xlim:list=None, selection:list[str]|str=None) -> None:
         """
         Makes a quicklook plot of one or more channels for a given dataframe.
         Meant to be used in interactive mode, so that the user can apply data selection
@@ -76,7 +88,9 @@ class Reg:
         channel : str, list
         resample : str
         xlim : list
-        selection : {str} format: %Y-%m-%d %H:%M%S
+        selection : {list[str] or str} format: %Y-%m-%d %H:%M%S.
+                    If given a pair of timestamps, apply selection between them. If one timestamp, start selection
+                    from the beginning of the input data and select up to the given timestamp.
         """
 
         # Apply resampling if asked to
@@ -84,6 +98,10 @@ class Reg:
             data = calc.resample_df(df=self.data, avg=resample)
         else:
             data = self.data.copy(deep=True)
+
+        # Exclude data outside figure boundaries:
+        if isinstance(xlim, tuple|list):
+            data = data.loc[(data.index >= xlim[0])&(data.index <= xlim[1])]
 
         # Make sure that channel is a list to iterate over
         if channel is None:
@@ -94,18 +112,37 @@ class Reg:
         # Attach the fig and axes to class attributes
         self.quicklook_fig, self.quicklook_ax = plt.subplots(figsize=STANDARD_QUICKLOOK_FIGSIZE)
 
+        # Next block is about determining the selection for the data. It will be done either by
+        # a click on the interactive plot or by giving "selection" parameter as an input.
+        #
         # Attach the onclick() -method to a mouse button press event for the interactive plot if
         # a selection parameter was not provided
         if selection is None:
             self.quicklook_fig.canvas.mpl_connect('button_press_event', self._onclick)
         else:
+            # First make sure that selection is of correct type
             _validate_selection(selection=selection)
-            selection_dt = pd.to_datetime(selection)
-            closest_dt_index = data.index.get_indexer(target=[selection_dt], method="nearest")[0]
+
+            # The numerical index of channel is needed to access the right selection y values
             idx_of_channel = data.columns.get_indexer(target=[channel[0]])[0]
-            self.set_selection_max(x=selection_dt,
-                                   y=data.iat[closest_dt_index, idx_of_channel])
-            self.draw_selection_line_marker(x=selection_dt)
+
+            # 
+            if isinstance(selection, str):
+                selection = [selection]
+            else:
+                selection_min_dt = pd.to_datetime(selection[0])
+                closest_min_dt_index = data.index.get_indexer(target=[selection_min_dt], method="nearest")[0]
+                self._set_selection_min(x=selection_min_dt,
+                                        y=data.iat[closest_min_dt_index, idx_of_channel])
+                self._draw_selection_line_marker(x=selection_min_dt)
+
+            # This is ran regardless of wether selection was str or list
+            selection_max_dt = pd.to_datetime(selection[-1])
+            closest_max_dt_index = data.index.get_indexer(target=[selection_max_dt], method="nearest")[0]
+            self._set_selection_max(x=selection_max_dt,
+                                    y=data.iat[closest_max_dt_index, idx_of_channel])
+            self._draw_selection_line_marker(x=selection_max_dt)
+
 
         # Set the axis settings
         self.quicklook_ax.set_yscale("log")
@@ -145,7 +182,7 @@ class Reg:
         threshold : {float}
         plot : {bool}
         diagnostics : {bool}
-        index_choice : {str}
+        index_choice : {str} Either 'counting_numbers' or 'time_s'
         plot_style : {str} Either 'step' or 'scatter'
         breaks : {int} Number of breaks to search for.
         title : {str} The title string.
@@ -172,6 +209,10 @@ class Reg:
             data = self.data.copy(deep=True)
             resample = calc.infer_cadence(series=data[channel])
 
+        # Exclude data outside figure boundaries:
+        if isinstance(xlim, tuple|list):
+            data = data.loc[(data.index >= xlim[0])&(data.index <= xlim[1])]
+
         # Select the channel and produce indices for them. The indices are stored in the 
         # column "time_s", for they read seconds since the Unix epoch (1970-01-01 00:00:00).
         # The index numbers can be used for the regression algorithm instead of datetime values. 
@@ -190,11 +231,16 @@ class Reg:
         else:
             max_idx = data.index.get_indexer(target=[self.selection_max_x], method="nearest")[0]
             max_val = self.selection_max_y
+            if not pd.isnull(self.selection_min_x):
+                min_idx = data.index.get_indexer(target=[self.selection_min_x], method="nearest")[0]
+            else:
+                min_idx = 0
+                
 
         # Apply a slice/selection to the data series and the numerical indices (seconds since Epoch)
         # according to the first peak found
-        series = series[:max_idx]
-        numerical_indices = data[index_choice].values[:max_idx]
+        series = series[min_idx:max_idx]
+        numerical_indices = data[index_choice].values[min_idx:max_idx]
 
         # Get the fit results
         fit_results = break_regression(ints=series.values, indices=numerical_indices, num_of_breaks=breaks)
@@ -256,7 +302,7 @@ class Reg:
                 err_delta_plusminus = str(breakpoint_dt - list_of_dt_breakpoint_errs[i][0])[7:7+8]
                 #err_delta_minus = str(list_of_dt_breakpoint_errs[i][1] - breakpoint_dt)[7:7+8]
                 #bp_label = f"breakpoint$_{{{i}}}$: "+f"{breakpoint_dt.strftime('%H:%M:%S')}$_{{-{err_delta_minus}}}^{{+{err_delta_plus}}}$"
-                bp_label = f"breakpoint$_{{{i}}}$: "+f"{breakpoint_dt.strftime('%H:%M:%S')}$\pm${err_delta_plusminus}"
+                bp_label = f"breakpoint$_{{{i}}}$: "+f"{breakpoint_dt.strftime('%H:%M:%S')}{LATEX_PM}{err_delta_plusminus}"
                 ax.axvspan(xmin=list_of_dt_breakpoint_errs[i][0], xmax=list_of_dt_breakpoint_errs[i][1], alpha=BREAKPOINT_SHADING_ALPHA, color="red")
                 ax.axvline(x=breakpoint_dt, c="red", lw=1.8, label=bp_label)
 

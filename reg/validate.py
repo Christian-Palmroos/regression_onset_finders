@@ -21,6 +21,6 @@ def _validate_fit_convergence(regression_converged:bool) -> None:
     if not regression_converged:
         raise ValueError(f"Regression converged: {regression_converged}. Try other settings.")
 
-def _validate_selection(selection:str) -> None:
-    if not isinstance(selection, str):
-        raise TypeError(f"The selection parameter must be a pandas-compatible datetime string, but {type(selection)} was provided!")
+def _validate_selection(selection:list[str]|str) -> None:
+    if not isinstance(selection, (list,str)):
+        raise TypeError(f"The selection parameter must be a pandas-compatible datetime string or a pair of string (list), but {type(selection)} was provided!")
