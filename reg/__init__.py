@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-import ipympl
+# import ipympl
 
 from matplotlib.dates import DateFormatter
 
@@ -39,6 +39,8 @@ class Reg:
         self.selection_min_x = pd.NaT
         self.selection_min_y = np.nan
 
+        # To keep track of how many times self._onclick() has been run
+        self.clicked = 0
 
     def _set_selection_max(self, x, y) -> None:
         """
@@ -63,12 +65,15 @@ class Reg:
         Store coordinates to class attributes when clicking the interactive plot.
         Also draws a vertical line marking the end of the selection criterion.
         """
+        # Update counter before doing anything
+        self.clicked += 1
         if event.xdata is not None and event.ydata is not None:
             # First convert matplotlib's xdata (days after epoch) to seconds and then to datetime
             x = pd.to_datetime(event.xdata*SECONDS_PER_DAY, unit='s')
-            self.set_selection_max(x=x, y=event.ydata)
-
-        self._draw_selection_line_marker(x=self.clicked_coords[-1][0])
+            self._set_selection_max(x=x, y=event.ydata)
+            self._draw_selection_line_marker(x=x)
+        else:
+            raise TypeError("Event xdata or ydata was None")
 
 
     def _draw_selection_line_marker(self, x) -> None:
@@ -116,9 +121,9 @@ class Reg:
         # a click on the interactive plot or by giving "selection" parameter as an input.
         #
         # Attach the onclick() -method to a mouse button press event for the interactive plot if
-        # a selection parameter was not provided
+        # the selection parameter was not provided
         if selection is None:
-            self.quicklook_fig.canvas.mpl_connect('button_press_event', self._onclick)
+            cid = self.quicklook_fig.canvas.mpl_connect(s="button_press_event", func=self._onclick)
         else:
             # First make sure that selection is of correct type
             _validate_selection(selection=selection)
@@ -194,6 +199,7 @@ class Reg:
         """
 
         # Clears the past figure (interactive)
+        plt.ioff()
         plt.close()
 
         # Run checks
@@ -224,10 +230,12 @@ class Reg:
         # This is what's getting plotted
         plot_series = series.copy(deep=True)
 
+        # selection_max was left undefined -> try to seek for the first peak 
         if pd.isnull(self.selection_max_x):
             # Get the numerical index of the first peak to choose the selection from 
             # background to first peak. Also generate numerical index to run from 0 to max_idx
             max_val, max_idx = calc.search_first_peak(ints=series, window=window, threshold=threshold)
+            min_idx = 0
         else:
             max_idx = data.index.get_indexer(target=[self.selection_max_x], method="nearest")[0]
             max_val = self.selection_max_y
