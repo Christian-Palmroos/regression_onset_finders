@@ -1,7 +1,8 @@
 
 """
-Contains the first development version for ramp regression and break regression algorithm -based
-SEP event onset finding tools.
+Contains the first development version for an SEP event onset finding tool that utilizes 
+segmented linear regression.
+piecewise-regression: Pilgrim, 2021.
 """
 
 __author__ = "Christian Palmroos"
@@ -24,6 +25,7 @@ from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_QUICKLOO
 
 from .validate import _validate_index_choice, _validate_plot_style, _validate_fit_convergence, _validate_selection
 
+from .externals import export_seppy_data
 
 DEFAULT_NUM_OF_BREAKPOINTS = 1
 SECONDS_PER_DAY = 86400

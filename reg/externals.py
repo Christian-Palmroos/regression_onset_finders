@@ -1,0 +1,49 @@
+
+"""
+A file that contains functions for the 'external' usage, e.g., functionality ran in a notebook.
+"""
+
+import pandas as pd
+
+def export_seppy_data(event, viewing=None, species=None) -> pd.DataFrame:
+    """
+    The data is contained inside SEPpy Event objects. This function
+    exports the dataframe from the object.
+
+    Parameters:
+    -----------
+    event : {seppy.Event}
+
+    viewing : {str|int} optional.
+
+    species : {str} optional.
+
+    Returns:
+    ---------
+    df : {pd.DataFrame}
+    """
+
+    # Viewing is necessary information relating to WHICH dataframe is
+    # exported from Event.
+    if viewing is None:
+        viewing = event.viewing
+
+    if species is None:
+        species = event.species
+
+    # Running choose_data() asserts the correct dataframes as
+    event.choose_data(viewing=viewing)
+
+    # Solar Orbiter data files have a MultiIndex-structure:
+    if event.spacecraft=="solo":
+        if species=='e':
+            return event.current_df_e.copy(deep=True)["Electron_Flux"]
+        else:
+            return event.current_df_i.copy(deep=True)["Ion_Flux"]
+
+    # Now there are a maximum of two dataframes, one for positive and one 
+    # for negative particle charges
+    if species=='e':
+        return event.current_df_e.copy(deep=True)
+    else:
+        return event.current_df_i.copy(deep=True)

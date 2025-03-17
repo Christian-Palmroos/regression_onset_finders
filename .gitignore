@@ -3,3 +3,6 @@
 
 # Figures and pictures need not be updated
 *.png
+
+# Anything inside data
+data/*
