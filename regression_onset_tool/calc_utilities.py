@@ -326,3 +326,88 @@ def infer_cadence(series:pd.Series) -> str:
     else:
         freq_str = series.index.freq.freqstr
         return freq_str if freq_str!="min" else f"1 {freq_str}"
+
+
+def breakpoints_to_datetime(series:pd.Series, numerical_indices:np.ndarray, list_of_breakpoints:list, 
+                                list_of_breakpoint_errs:list, index_choice:str):
+    """
+    Converts breakpoints (along with their errors) that are floats to datetimes.
+
+    Parameters:
+    -----------
+    series : {pd.Series} The data series indexed by time.
+    numerical_indices : {np.ndarray} The numerical indices of data, either ordinal numbers or seconds.
+
+    list_of_breakpoints : {list[float]}
+    list_of_breakpoint_errs : {list[tuple]}
+    index_choice : {str} Either 'counting_numbers' or 'time_s'
+
+    Returns:
+    -----------
+    list_of_dt_breakpoints : {list[datetime]}
+    list_of_dt_breakpoint_errs : {list[tuple]}
+    """
+
+    list_of_dt_breakpoints = []
+    list_of_dt_breakpoint_errs = []
+
+    if index_choice == "counting_numbers":
+        # Choose the LAST entry of a linear space of integers that map to numerical_indices smaller than
+        # the break_point. This is "how manieth" data point break_point is in series.
+        lin_idx = np.linspace(start=0, stop=len(series)-1, num=len(series))
+        for i, break_point in enumerate(list_of_breakpoints):
+            break_point_idx = lin_idx[numerical_indices<break_point][-1]
+            break_point_err_minus_idx = lin_idx[numerical_indices<list_of_breakpoint_errs[i][0]][-1]
+            break_point_err_plus_idx = lin_idx[numerical_indices<list_of_breakpoint_errs[i][1]][-1]
+            breakpoint_dt = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_idx)
+            breakpoint_dt_minus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_minus_idx)
+            breakpoint_dt_plus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_plus_idx)
+            list_of_dt_breakpoints.append(breakpoint_dt)
+            list_of_dt_breakpoint_errs.append((breakpoint_dt_minus_err, breakpoint_dt_plus_err))
+    else:
+        for i, break_point in enumerate(list_of_breakpoints):
+            breakpoint_dt = pd.to_datetime(break_point, unit='s')
+            breakpoint_dt_minus_err = pd.to_datetime(list_of_breakpoint_errs[i][0], unit='s')
+            breakpoint_dt_plus_err = pd.to_datetime(list_of_breakpoint_errs[i][1], unit='s')
+            list_of_dt_breakpoints.append(breakpoint_dt)
+            list_of_dt_breakpoint_errs.append((breakpoint_dt_minus_err, breakpoint_dt_plus_err))
+
+    return list_of_dt_breakpoints, list_of_dt_breakpoint_errs
+
+
+def unpack_fit_results(fit_results:dict, num_of_breaks:int) -> tuple:
+    """
+
+    Parameters:
+    -----------
+    fit_results : {dict}
+
+    Returns:
+    -----------
+    const : {float} The constant of the first fit
+    list_of_alphas : {list[float]} A list of slopes for the polynomial fits.
+    list_of_breakpoints : {list[float]} A list of breakpoints for the fits.
+    """
+
+    # The constant and slope of the first fit are always there.
+    const = fit_results["const"]["estimate"]
+    alpha = fit_results["alpha1"]["estimate"]
+
+    # Initialize lists to collect values into
+    list_of_alphas = [alpha]
+    list_of_breakpoints = []
+    list_of_breakpoint_errs = []
+
+    # For a single break, there will be one iteration in the loop -> one additional slope. 
+    for i in range(num_of_breaks):
+
+        # Access the i+2th index in fit_results, because that package's indexing somehow starts from 1, not 0.
+        alpha = fit_results[f"alpha{i+2}"]["estimate"]
+        break_point = fit_results[f"breakpoint{i+1}"]["estimate"]
+        break_point_errs = fit_results[f"breakpoint{i+1}"]["confidence_interval"]
+
+        list_of_alphas.append(alpha)
+        list_of_breakpoints.append(break_point)
+        list_of_breakpoint_errs.append(break_point_errs)
+
+    return const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs

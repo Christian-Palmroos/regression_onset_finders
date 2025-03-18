@@ -41,6 +41,7 @@ def set_standard_ticks(ax, labelsize:int=None) -> None:
     ax.tick_params(which="major", length=STANDARD__MAJOR_TICKLEN, width=STANDARD_MAJOR_TICKWIDTH, labelsize=labelsize)
     ax.tick_params(which="minor", length=STANDARD_MINOR_TICKLEN, width=STANDARD_MINOR_TICKWIDTH, labelsize=labelsize-5)
 
+
 def set_xlims(ax:plt.Axes, data:pd.DataFrame, xlim:list[str]) -> None:
     """
     Sets the x-axis boundaries for the plot
@@ -56,3 +57,19 @@ def set_xlims(ax:plt.Axes, data:pd.DataFrame, xlim:list[str]) -> None:
         ax.set_xlim(data.index.values[0], data.index.values[-1])
     else:
         ax.set_xlim(pd.to_datetime(xlim[0]), pd.to_datetime(xlim[1]))
+
+
+def fabricate_yticks(ax:plt.Axes) -> None:
+    """
+    Changes the y-axis labels to their 10-base exponential counterparts for the integer values.
+    Example: [1, 1.5, 2, 2.5, 3] -> [10^1, 10^2, 10^3]
+
+    ax : {plt.Axes} The axis object of the figure.
+    """
+
+    integer_tick_values = [int(val) for val in ax.get_yticks() if val%1==0]
+    ax.set_yticks(integer_tick_values)
+
+    # Triple curvy brackets for LateX inside f-string.
+    tick_labels = [f"10$^{{{val}}}$" for val in integer_tick_values]
+    ax.set_yticklabels(tick_labels)

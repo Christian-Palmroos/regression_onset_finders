@@ -19,8 +19,8 @@ import piecewise_regression
 
 # Relative imports cannot be used with "import .a" form; use "from . import a" instead. -Pylance
 from . import calc_utilities as calc
-from .plotting_utilities import set_standard_ticks, set_xlims, STANDARD_QUICKLOOK_FIGSIZE, STANDARD_TITLE_FONTSIZE, \
-                                STANDARD_FIGSIZE, STANDARD_LEGENDSIZE, DEFAULT_SELECTION_ALPHA, \
+from .plotting_utilities import set_standard_ticks, set_xlims, fabricate_yticks, STANDARD_QUICKLOOK_FIGSIZE, \
+                                STANDARD_TITLE_FONTSIZE, STANDARD_FIGSIZE, STANDARD_LEGENDSIZE, DEFAULT_SELECTION_ALPHA, \
                                 BREAKPOINT_SHADING_ALPHA, LATEX_PM
 
 from .validate import _validate_index_choice, _validate_plot_style, _validate_fit_convergence, _validate_selection
@@ -174,10 +174,11 @@ class Reg:
                         threshold:float=None, plot:bool=True, diagnostics=False, index_choice="time_s", 
                         plot_style="step", breaks=1, title:str=None):
         """
-        Seeks for the first peak in the given data. Cuts the data and only considers that part which comes
-        before the first peak. In this chosen part, seek (a) break/s in the linear trend that is the background
-        of the event. The break corresponds to the start of the event, and the second linear fit corresponds
-        to the slope of the rising phase of the event (the linear slope of the 10-based logarithm).
+        If not using manual selection, then seeks for the first peak in the given data. Cuts the data there 
+        and only considers that part which comes before the first peak. In this chosen part, seek (a) break/s 
+        in the linear trend that is the background of the event. The break corresponds to the start of the 
+        event, and the second linear fit corresponds to the slope of the rising phase of the event (the linear 
+        slope of the 10-based logarithm).
 
         Parameters:
         -----------
@@ -201,7 +202,6 @@ class Reg:
         """
 
         # Clears the past figure (interactive)
-        plt.ioff()
         plt.close()
 
         # Run checks
@@ -261,11 +261,11 @@ class Reg:
 
         _validate_fit_convergence(regression_converged=regression_converged)
 
-        const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs = unpack_fit_results(fit_results=estimates,
+        const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs = calc.unpack_fit_results(fit_results=estimates,
                                                                                                 num_of_breaks=breaks)
 
         # Finds corresponding timestamps to the numerical indices
-        list_of_dt_breakpoints, list_of_dt_breakpoint_errs = breakpoints_to_datetime(series=series, numerical_indices=numerical_indices,
+        list_of_dt_breakpoints, list_of_dt_breakpoint_errs = calc.breakpoints_to_datetime(series=series, numerical_indices=numerical_indices,
                                                                                     list_of_breakpoints=list_of_breakpoints,
                                                                                     list_of_breakpoint_errs=list_of_breakpoint_errs,
                                                                                     index_choice=index_choice)
@@ -344,22 +344,6 @@ class Reg:
         return results_dict
 
 
-def fabricate_yticks(ax:plt.Axes) -> None:
-    """
-    Changes the y-axis labels to their 10-base exponebntial counterparts for the integer values.
-    Example: [1, 1.5, 2, 2.5, 3] -> [10^1, 10^2, 10^3]
-
-    ax : {plt.Axes} The axis object of the figure.
-    """
-
-    integer_tick_values = [int(val) for val in ax.get_yticks() if val%1==0]
-    ax.set_yticks(integer_tick_values)
-
-    # Triple curvy brackets for LateX inside f-string.
-    tick_labels = [f"10$^{{{val}}}$" for val in integer_tick_values]
-    ax.set_yticklabels(tick_labels)
-
-
 def break_regression(ints, indices, starting_values:list=None, num_of_breaks:int=None) -> dict:
     """
     Initializes the Fit of piecewise_regression package, effectively running the algorithm for
@@ -386,93 +370,4 @@ def break_regression(ints, indices, starting_values:list=None, num_of_breaks:int
                                    n_breakpoints=num_of_breaks)
 
     return fit.get_results()
-
-
-def unpack_fit_results(fit_results:dict, num_of_breaks:int) -> tuple:
-    """
-
-    Parameters:
-    -----------
-    fit_results : {dict}
-
-    Returns:
-    -----------
-    const : {float} The constant of the first fit
-    list_of_alphas : {list[float]} A list of slopes for the polynomial fits.
-    list_of_breakpoints : {list[float]} A list of breakpoints for the fits.
-    """
-
-    # The constant and slope of the first fit are always there.
-    const = fit_results["const"]["estimate"]
-    alpha = fit_results["alpha1"]["estimate"]
-
-    # Initialize lists to collect values into
-    list_of_alphas = [alpha]
-    list_of_breakpoints = []
-    list_of_breakpoint_errs = []
-
-    # For a single break, there will be one iteration in the loop -> one additional slope. 
-    for i in range(num_of_breaks):
-
-        # Access the i+2th index in fit_results, because that package's indexing somehow starts from 1, not 0.
-        alpha = fit_results[f"alpha{i+2}"]["estimate"]
-        break_point = fit_results[f"breakpoint{i+1}"]["estimate"]
-        break_point_errs = fit_results[f"breakpoint{i+1}"]["confidence_interval"]
-
-        list_of_alphas.append(alpha)
-        list_of_breakpoints.append(break_point)
-        list_of_breakpoint_errs.append(break_point_errs)
-
-    return const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs
-
-
-def breakpoints_to_datetime(series:pd.Series, numerical_indices:np.ndarray, list_of_breakpoints:list, 
-                                list_of_breakpoint_errs:list, index_choice:str):
-    """
-    Converts breakpoints (along with their errors) that are floats to datetimes.
-
-    Parameters:
-    -----------
-    series : {pd.Series} The data series indexed by time.
-    numerical_indices : {np.ndarray} The numerical indices of data, either ordinal numbers or seconds.
-
-    list_of_breakpoints : {list[float]}
-    list_of_breakpoint_errs : {list[tuple]}
-    index_choice : {str} Either 'counting_numbers' or 'time_s'
-
-    Returns:
-    -----------
-    list_of_dt_breakpoints : {list[datetime]}
-    list_of_dt_breakpoint_errs : {list[tuple]}
-    """
-
-    list_of_dt_breakpoints = []
-    list_of_dt_breakpoint_errs = []
-
-    if index_choice == "counting_numbers":
-        # Choose the LAST entry of a linear space of integers that map to numerical_indices smaller than
-        # the break_point. This is "how manieth" data point break_point is in series.
-        lin_idx = np.linspace(start=0, stop=len(series)-1, num=len(series))
-        for i, break_point in enumerate(list_of_breakpoints):
-            break_point_idx = lin_idx[numerical_indices<break_point][-1]
-            break_point_err_minus_idx = lin_idx[numerical_indices<list_of_breakpoint_errs[i][0]][-1]
-            break_point_err_plus_idx = lin_idx[numerical_indices<list_of_breakpoint_errs[i][1]][-1]
-            breakpoint_dt = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_idx)
-            breakpoint_dt_minus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_minus_idx)
-            breakpoint_dt_plus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_plus_idx)
-            list_of_dt_breakpoints.append(breakpoint_dt)
-            list_of_dt_breakpoint_errs.append((breakpoint_dt_minus_err, breakpoint_dt_plus_err))
-    else:
-        for i, break_point in enumerate(list_of_breakpoints):
-            breakpoint_dt = pd.to_datetime(break_point, unit='s')
-            breakpoint_dt_minus_err = pd.to_datetime(list_of_breakpoint_errs[i][0], unit='s')
-            breakpoint_dt_plus_err = pd.to_datetime(list_of_breakpoint_errs[i][1], unit='s')
-            list_of_dt_breakpoints.append(breakpoint_dt)
-            list_of_dt_breakpoint_errs.append((breakpoint_dt_minus_err, breakpoint_dt_plus_err))
-
-    return list_of_dt_breakpoints, list_of_dt_breakpoint_errs
-
-
-
-
 
