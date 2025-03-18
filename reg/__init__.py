@@ -42,7 +42,7 @@ class Reg:
         self.selection_min_y = np.nan
 
         # To keep track of how many times self._onclick() has been run
-        self.clicked = 0
+        self.times_clicked = 0
 
     def _set_selection_max(self, x, y) -> None:
         """
@@ -68,7 +68,7 @@ class Reg:
         Also draws a vertical line marking the end of the selection criterion.
         """
         # Update counter before doing anything
-        self.clicked += 1
+        self.times_clicked += 1
         if event.xdata is not None and event.ydata is not None:
             # First convert matplotlib's xdata (days after epoch) to seconds and then to datetime
             x = pd.to_datetime(event.xdata*SECONDS_PER_DAY, unit='s')
