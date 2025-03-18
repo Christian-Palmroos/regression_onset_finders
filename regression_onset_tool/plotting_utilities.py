@@ -30,7 +30,7 @@ BREAKPOINT_SHADING_ALPHA = 0.18
 
 LATEX_PM = r"$\pm$"
 
-def set_standard_ticks(ax, labelsize:int=None) -> None:
+def set_standard_ticks(ax:plt.Axes, labelsize:int=None) -> None:
     """
     Handles tickmarks, their sizes etc...
     """

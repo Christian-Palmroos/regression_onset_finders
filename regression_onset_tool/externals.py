@@ -47,3 +47,19 @@ def export_seppy_data(event, viewing=None, species=None) -> pd.DataFrame:
         return event.current_df_e.copy(deep=True)
     else:
         return event.current_df_i.copy(deep=True)
+
+
+def save_figure(results:dict, name:str, facecolor="white", transparent=False) -> None:
+    """
+    Saves a figure to local directory with name.
+    """
+
+    FIGURE_KEY = "fig"
+
+    try:
+        _ = results[FIGURE_KEY]
+    except KeyError:
+        print("There is no figure in results to save!")
+        return None
+
+    results[FIGURE_KEY].savefig(name, facecolor=facecolor, transparent=transparent, bboc_inches="tight")

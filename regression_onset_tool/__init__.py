@@ -172,7 +172,7 @@ class Reg:
 
     def find_breakpoints(self, channel:str, resample:str=None, xlim:list=None, window:int=None, 
                         threshold:float=None, plot:bool=True, diagnostics=False, index_choice="time_s", 
-                        plot_style="step", breaks=1, title:str=None):
+                        plot_style="step", breaks=1, title:str=None, fill_zeroes=True):
         """
         If not using manual selection, then seeks for the first peak in the given data. Cuts the data there 
         and only considers that part which comes before the first peak. In this chosen part, seek (a) break/s 
@@ -182,18 +182,18 @@ class Reg:
 
         Parameters:
         -----------
-        data : {pd.DataFrame}
-        channel : {str}
+        channel : {str} The ID of the 
         resample : {str}
         xlim : {list}
         window : {str}
         threshold : {float}
-        plot : {bool}
+        plot : {bool} Draws the plot of breakpoints and intensity time series.
         diagnostics : {bool}
         index_choice : {str} Either 'counting_numbers' or 'time_s'
         plot_style : {str} Either 'step' or 'scatter'
         breaks : {int} Number of breaks to search for.
         title : {str} The title string.
+        fill_zeroes : {bool} Fills zero intensity bins with a filler value, described in calc.fill_zeros().
 
         Returns:
         ----------
@@ -201,8 +201,8 @@ class Reg:
                             'break_point' and 'break_errors'.
         """
 
-        # Clears the past figure (interactive)
-        plt.close()
+        # Clears the past (interactive) figure
+        plt.close("all")
 
         # Run checks
         _validate_index_choice(index_choice=index_choice)
@@ -225,10 +225,18 @@ class Reg:
         # column "time_s", for they read seconds since the Unix epoch (1970-01-01 00:00:00).
         # The index numbers can be used for the regression algorithm instead of datetime values. 
         data = calc.produce_index_numbers(df=data)
-        data = calc.select_channel_nonzero_ints(df=data, channel=channel)
+
+        # Choose how to treat 0 intensities before taking logarithms
+        if fill_zeroes:
+            data = calc.add_ordinal_numbers(df=data)
+            series = calc.fill_zeros(series=data[channel])
+        else:
+            # This function handles also adding ordinal numbers
+            data = calc.select_channel_nonzero_ints(df=data, channel=channel)
+            series = data[channel]
 
         # Convert to log
-        series = calc.ints2log10(intensity=data[channel])
+        series = calc.ints2log10(intensity=series)
         # This is what's getting plotted
         plot_series = series.copy(deep=True)
 
@@ -245,7 +253,7 @@ class Reg:
                 min_idx = data.index.get_indexer(target=[self.selection_min_x], method="nearest")[0]
             else:
                 min_idx = 0
-                
+
 
         # Apply a slice/selection to the data series and the numerical indices (seconds since Epoch)
         # according to the first peak found

@@ -12,7 +12,7 @@ import pandas as pd
 
 # Global constants
 INDEX_NUMBER_COL_NAME = "time_s"
-COUNTING_NUMBERS_COL_NAME = "counting_numbers"
+ORDINAL_NUMBERS_COL_NAME = "counting_numbers"
 
 
 def select_channel_nonzero_ints(df:pd.DataFrame, channel:str, dropnan:bool=True):
@@ -23,12 +23,9 @@ def select_channel_nonzero_ints(df:pd.DataFrame, channel:str, dropnan:bool=True)
     """
 
     # Work on a copy to not alter the original one
-    df = df.copy(deep=True)
+    df = add_ordinal_numbers(df=df)
 
-    counting_numbers =  np.linspace(start=0, stop=len(df)-1, num=len(df))
-    df[COUNTING_NUMBERS_COL_NAME] = counting_numbers.astype(int)
-
-    selection = df[[channel, INDEX_NUMBER_COL_NAME, COUNTING_NUMBERS_COL_NAME]]
+    selection = df[[channel, INDEX_NUMBER_COL_NAME, ORDINAL_NUMBERS_COL_NAME]]
     selection = selection.loc[selection[channel]!=0]
 
     if dropnan:
@@ -37,6 +34,17 @@ def select_channel_nonzero_ints(df:pd.DataFrame, channel:str, dropnan:bool=True)
 
     return selection
 
+
+def add_ordinal_numbers(df:pd.DataFrame):
+    """
+    Adds ordinal numbers (0,1,2,3...,N) column to the dataframe.
+    """
+    df = df.copy(deep=True)
+
+    counting_numbers =  np.linspace(start=0, stop=len(df)-1, num=len(df))
+    df[ORDINAL_NUMBERS_COL_NAME] = counting_numbers.astype(int)
+
+    return df
 
 def produce_index_numbers(df:pd.DataFrame):
     # Work on a copy to not alter the original one
@@ -124,7 +132,7 @@ def generate_fit_lines(data_df:pd.DataFrame, indices:np.ndarray, const:float, li
         # For the start of the selection, first take 0, and then always index i-1 from breakpoints.
         # For the end of the selection, always take ith breakpoint, except for the final take len(indices)==final index
         selection_start = list_of_breakpoints[i-1] if i > 0 else 0
-        selection_end = list_of_breakpoints[i] if i < len(list_of_breakpoints) else len(indices) if index_choice==COUNTING_NUMBERS_COL_NAME else indices[-1]
+        selection_end = list_of_breakpoints[i] if i < len(list_of_breakpoints) else len(indices) if index_choice==ORDINAL_NUMBERS_COL_NAME else indices[-1]
 
         index_selection = indices[(indices>=selection_start)&(indices<=selection_end)]
 
@@ -183,7 +191,7 @@ def _generate_fits_datetimes(list_of_indices:list, data_df:pd.DataFrame, index_c
     list_of_datetimes = []
     if index_choice=="counting_numbers":
         for indices in list_of_indices:
-            datetimes_selection = data_df.loc[data_df[COUNTING_NUMBERS_COL_NAME].isin(indices)].index
+            datetimes_selection = data_df.loc[data_df[ORDINAL_NUMBERS_COL_NAME].isin(indices)].index
             list_of_datetimes.append(datetimes_selection)
     else:
         for indices in list_of_indices:
@@ -359,9 +367,9 @@ def breakpoints_to_datetime(series:pd.Series, numerical_indices:np.ndarray, list
             break_point_idx = lin_idx[numerical_indices<break_point][-1]
             break_point_err_minus_idx = lin_idx[numerical_indices<list_of_breakpoint_errs[i][0]][-1]
             break_point_err_plus_idx = lin_idx[numerical_indices<list_of_breakpoint_errs[i][1]][-1]
-            breakpoint_dt = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_idx)
-            breakpoint_dt_minus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_minus_idx)
-            breakpoint_dt_plus_err = calc.get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_plus_idx)
+            breakpoint_dt = get_interpolated_timestamp(datetimes=series.index, break_point=break_point_idx)
+            breakpoint_dt_minus_err = get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_minus_idx)
+            breakpoint_dt_plus_err = get_interpolated_timestamp(datetimes=series.index, break_point=break_point_err_plus_idx)
             list_of_dt_breakpoints.append(breakpoint_dt)
             list_of_dt_breakpoint_errs.append((breakpoint_dt_minus_err, breakpoint_dt_plus_err))
     else:
@@ -411,3 +419,82 @@ def unpack_fit_results(fit_results:dict, num_of_breaks:int) -> tuple:
         list_of_breakpoint_errs.append(break_point_errs)
 
     return const, list_of_alphas, list_of_breakpoints, list_of_breakpoint_errs
+
+
+def fill_zeros(series:pd.Series) -> pd.Series:
+    """
+    Replaces the zeros of a series with a filler value f, which obeys the equation:
+    log_true_mean = 1/(num_all_values) *  ( sum_log_nonzeros + (num_all_values - num_nonzeros) * log(f) )
+    """
+
+    # Work on a copy of the series to not alter the original one by accident
+    series = series.copy(deep=True)
+
+    ordinal_idx = _find_last_0_index(series=series)
+
+    # -1 is an invalid index and therefore we exit here
+    if ordinal_idx == -1:
+        return series
+
+    # Apply a selection to the series, up to the final 0.
+    series_sel = series.iloc[:ordinal_idx]
+
+    filler = _calculate_filler(series=series_sel)
+    
+    # Replace zeroes with the filler value and return
+    new_values = np.where(series.values > 0, series.values, filler)
+
+    return pd.Series(new_values, index=series.index)
+
+
+def _find_last_0_index(series:pd.Series) -> int:
+    """
+    Finds the ordinal index of the final 0 in a series.
+    Example: series = [1,2,0,3,4,0,5] -> returns 5.
+    """
+    MIN_SERIES_LEN = 1000
+    TARGET_VALUE = 0.
+
+    # Search for the last 0:
+    # Start by cutting half the series if iẗ́'s short enough; the tail may sometimes have zeroes
+    series_half = series.iloc[:len(series)//2] if len(series) > MIN_SERIES_LEN else series
+
+    try:
+        final_0_index = series_half[series_half == TARGET_VALUE].index[-1]
+
+    # IndexError is cause by the value being serched for not existing in the series.
+    except IndexError:
+        # Nothing to do, so just return
+        return -1
+
+    return series.index.get_indexer(target=[final_0_index])[0]
+
+
+def _calculate_filler(series:pd.Series) -> float:
+    """
+    Calculates the filler value for fill_zeros() -function.
+    Returns: filler {float}
+    """
+
+    # Sets to nan all zeroes
+    series_nonzeros = np.where(series.values>0, series.values, np.nan)
+
+    # Assert the number of nonzero values and all values
+    num_nonzeros = np.count_nonzero(series)
+    num_all = len(series)
+
+    # This mean (including zeroes) is the true mean of log(ints) we are aiming for when filling the zeroes
+    log_true_mean = np.log10(series.mean())
+
+    #mean_log_nonzeros = np.nanmean(np.log10(series_nonzeros))
+
+    sum_log_nonzeros = np.nansum(np.log10(series_nonzeros))
+
+    nominator = num_all * log_true_mean - sum_log_nonzeros
+    denominator = num_all - num_nonzeros
+
+    log_filler = nominator / denominator
+
+    filler = np.power(10, log_filler)
+    
+    return filler
