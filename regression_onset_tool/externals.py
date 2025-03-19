@@ -1,7 +1,11 @@
 
 """
 A file that contains functions for the 'external' usage, e.g., functionality ran in a notebook.
+
 """
+
+__author__ = "Christian Palmroos"
+
 
 import pandas as pd
 
@@ -39,7 +43,10 @@ def export_seppy_data(event, viewing=None, species=None) -> pd.DataFrame:
         if species=='e':
             return event.current_df_e.copy(deep=True)["Electron_Flux"]
         else:
-            return event.current_df_i.copy(deep=True)["Ion_Flux"]
+            if event.sensor=="ept":
+                return event.current_df_i.copy(deep=True)["Ion_Flux"]
+            if event.sensor=="het":
+                return event.current_df_i.copy(deep=True)["H_Flux"]
 
     # Now there are a maximum of two dataframes, one for positive and one 
     # for negative particle charges
@@ -62,4 +69,4 @@ def save_figure(results:dict, name:str, facecolor="white", transparent=False) ->
         print("There is no figure in results to save!")
         return None
 
-    results[FIGURE_KEY].savefig(name, facecolor=facecolor, transparent=transparent, bboc_inches="tight")
+    results[FIGURE_KEY].savefig(name, facecolor=facecolor, transparent=transparent, bbox_inches="tight")

@@ -27,6 +27,8 @@ from .validate import _validate_index_choice, _validate_plot_style, _validate_fi
 
 from .externals import export_seppy_data
 
+from .select_data import data_file
+
 DEFAULT_NUM_OF_BREAKPOINTS = 1
 SECONDS_PER_DAY = 86400
 

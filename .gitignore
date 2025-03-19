@@ -1,11 +1,17 @@
 # Checkpoints of notebooks
 *.ipynb_checkpoints
 
+# Checkpoints for the notebook
+.ipynb_checkpoints
+
+# C
+__pycache__
+
 # Figures and pictures need not be updated
 *.png
 
 # Anything inside data
 data/*
 
-#
+# Development stage directory
 development/
