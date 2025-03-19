@@ -9,8 +9,8 @@ __author__ = "Christian palmroos"
 
 import ipywidgets as widgets
 
-HANDLE_NAME = "Load data from: "
-OPTIONS = ("SEPpy", "Local")
+HANDLE_NAME = "Data source: "
+OPTIONS = ("SEPpy", "User defined")
 BUTTON_STYLES = ("success", "info", "warning", "")
 
 TOGGLEBUTTON_TOOLTIPS = ("Select SEPpy for data loading",
@@ -32,3 +32,11 @@ data_file = widgets.ToggleButtons(
                 disabled=False
                 )
 
+#
+def _seppy_selected(data_file:widgets.ToggleButtons) -> bool:
+    """
+    Returns True if SEPpy is chosen. Otherwise returns False.
+    """
+    if data_file.value == OPTIONS[0]:
+        return True
+    return False

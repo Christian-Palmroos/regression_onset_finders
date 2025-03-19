@@ -38,6 +38,13 @@ def export_seppy_data(event, viewing=None, species=None) -> pd.DataFrame:
     # Running choose_data() asserts the correct dataframes as
     event.choose_data(viewing=viewing)
 
+    # PSP data files 
+    if event.spacecraft=="psp":
+        if species=='e':
+            return event.df_e
+        else:
+            return event.df_i
+
     # Solar Orbiter data files have a MultiIndex-structure:
     if event.spacecraft=="solo":
         if species=='e':
