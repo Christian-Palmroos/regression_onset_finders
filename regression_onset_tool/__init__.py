@@ -46,11 +46,18 @@ class Reg:
         # To keep track of how many times self._onclick() has been run
         self.times_clicked = 0
 
-    def _set_selection_max(self, x, y) -> None:
+    def set_selection_max(self, x, y=None) -> None:
         """
         Sets the parameters by which data selection maximum will be applied when running
         regression analysis.
+
+        Parameters:
+        -----------
+        x : {pd.Timestamp | datetime}
+        y : {float}
         """
+        if isinstance(x,str):
+            x = pd.to_datetime(x)
         self.selection_max_x = x
         self.selection_max_y = y
 
@@ -59,7 +66,14 @@ class Reg:
         """
         Sets the parameters by which data selection minimum will be applied when running
         regression analysis.
+
+        Parameters:
+        -----------
+        x : {pd.Timestamp | datetime}
+        y : {float}
         """
+        if isinstance(x,str):
+            x = pd.to_datetime(x)
         self.selection_min_x = x
         self.selection_min_y = y
 
@@ -74,7 +88,7 @@ class Reg:
         if event.xdata is not None and event.ydata is not None:
             # First convert matplotlib's xdata (days after epoch) to seconds and then to datetime
             x = pd.to_datetime(event.xdata*SECONDS_PER_DAY, unit='s')
-            self._set_selection_max(x=x, y=event.ydata)
+            self.set_selection_max(x=x, y=event.ydata)
             self._draw_selection_line_marker(x=x)
         else:
             raise TypeError("Event xdata or ydata was None")
@@ -101,6 +115,9 @@ class Reg:
                     If given a pair of timestamps, apply selection between them. If one timestamp, start selection
                     from the beginning of the input data and select up to the given timestamp.
         """
+
+        QUICKLOOK_TICK_LABELSIZE = 18
+        QUICKLOOK_LEGENDSIZE = STANDARD_LEGENDSIZE-5
 
         # Apply resampling if asked to
         if isinstance(resample,str):
@@ -135,7 +152,7 @@ class Reg:
             # The numerical index of channel is needed to access the right selection y values
             idx_of_channel = data.columns.get_indexer(target=[channel[0]])[0]
 
-            # 
+            # Check for selection; is it a single str or a pair of strs?
             if isinstance(selection, str):
                 selection = [selection]
             else:
@@ -148,7 +165,7 @@ class Reg:
             # This is ran regardless of wether selection was str or list
             selection_max_dt = pd.to_datetime(selection[-1])
             closest_max_dt_index = data.index.get_indexer(target=[selection_max_dt], method="nearest")[0]
-            self._set_selection_max(x=selection_max_dt,
+            self.set_selection_max(x=selection_max_dt,
                                     y=data.iat[closest_max_dt_index, idx_of_channel])
             self._draw_selection_line_marker(x=selection_max_dt)
 
@@ -156,7 +173,7 @@ class Reg:
         # Set the axis settings
         self.quicklook_ax.set_yscale("log")
         set_xlims(ax=self.quicklook_ax, data=data, xlim=xlim)
-        set_standard_ticks(ax=self.quicklook_ax, labelsize=None)
+        set_standard_ticks(ax=self.quicklook_ax, labelsize=QUICKLOOK_TICK_LABELSIZE)
 
         # Plot the curves
         for ch in channel:
@@ -165,10 +182,10 @@ class Reg:
         # Formatting the x-axis and setting the axis labels
         self.quicklook_ax.xaxis.set_major_formatter(DateFormatter("%H:%M\n%d"))
         self.quicklook_ax.set_xlabel(f"Date of {data.index[len(data.index)//2].strftime('%b, %Y')}", fontsize=STANDARD_LEGENDSIZE)
-        self.quicklook_ax.set_ylabel(r"Intensity [1/(cm$^{2}$ sr s MeV)]", fontsize=STANDARD_LEGENDSIZE)
+        self.quicklook_ax.set_ylabel(r"Intensity [1/(cm$^{2}$ sr s MeV)]", fontsize=QUICKLOOK_LEGENDSIZE)
 
         # Add the legend and show the figure
-        self.quicklook_ax.legend(fontsize=STANDARD_LEGENDSIZE)
+        self.quicklook_ax.legend(fontsize=QUICKLOOK_LEGENDSIZE)
         plt.show()
 
 
@@ -184,7 +201,7 @@ class Reg:
 
         Parameters:
         -----------
-        channel : {str} The ID of the 
+        channel : {str} The ID of the channel.
         resample : {str}
         xlim : {list}
         window : {str}
@@ -246,7 +263,10 @@ class Reg:
         if pd.isnull(self.selection_max_x):
             # Get the numerical index of the first peak to choose the selection from 
             # background to first peak. Also generate numerical index to run from 0 to max_idx
+            print("Notice that you're running regression analysis without a user-set selection of data.")
+            print(f"Manually searching for the peak of the event with given parameters: window={window}, threshold={threshold}")
             max_val, max_idx = calc.search_first_peak(ints=series, window=window, threshold=threshold)
+            print(f"Found peak with given parameters at: {data.index[max_idx]}")
             min_idx = 0
         else:
             max_idx = data.index.get_indexer(target=[self.selection_max_x], method="nearest")[0]
